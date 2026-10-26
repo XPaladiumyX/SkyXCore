@@ -1,36 +1,41 @@
 package net.skyxnetwork.core.hologram;
 
 import me.clip.placeholderapi.PlaceholderAPI;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import net.skyxnetwork.core.SkyXCore;
 import net.skyxnetwork.core.core.CoreSettings;
 import org.bukkit.Bukkit;
-import org.bukkit.Location;
-import org.bukkit.World;
-import org.bukkit.entity.ArmorStand;
+import org.bukkit.Color;
+import org.bukkit.entity.Display;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.TextDisplay;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.scheduler.BukkitTask;
+import org.bukkit.util.Transformation;
+import org.joml.Quaternionf;
+import org.joml.Vector3f;
 
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * A real per-player line above the in-game nametag. TAB cannot render a
- * per-player line natively on every client, so this uses a marker ArmorStand
- * with a visible custom name. It is compatible with Java and Bedrock clients.
+ * Per-player stats line above the real nametag.
+ *
+ * A TextDisplay is mounted as a passenger of the player, so it follows the
+ * player with zero teleport tasks and zero interpolation jitter. It is hidden
+ * from its own owner (first person and F5) and shown to everyone else.
  */
 public final class PlayerHolograms implements Listener {
 
     private final SkyXCore plugin;
     private volatile CoreSettings settings;
-    private final Map<UUID, ArmorStand> stands = new ConcurrentHashMap<>();
-    private BukkitTask task;
-    private long tick;
+    private final Map<UUID, TextDisplay> displays = new ConcurrentHashMap<>();
+    private BukkitTask textTask;
 
     public PlayerHolograms(SkyXCore plugin, CoreSettings settings) {
         this.plugin = plugin;
@@ -47,12 +52,12 @@ public final class PlayerHolograms implements Listener {
 
     public void stop() {
         HandlerList.unregisterAll(this);
-        if (task != null) task.cancel();
-        task = null;
-        for (ArmorStand stand : stands.values()) {
-            if (stand != null && stand.isValid()) stand.remove();
+        if (textTask != null) textTask.cancel();
+        textTask = null;
+        for (TextDisplay display : displays.values()) {
+            if (display != null && display.isValid()) display.remove();
         }
-        stands.clear();
+        displays.clear();
     }
 
     public void updateSettings(CoreSettings settings) {
@@ -61,40 +66,42 @@ public final class PlayerHolograms implements Listener {
         start();
     }
 
-    public void restartTask() {
-        if (task != null) task.cancel();
+    private void restartTask() {
+        if (textTask != null) textTask.cancel();
         if (!settings.playerHologramsEnabled) return;
-        task = Bukkit.getScheduler().runTaskTimer(plugin, this::tick,
-                settings.playerHologramMoveTicks, settings.playerHologramMoveTicks);
+        long ticks = Math.max(5L, settings.playerHologramUpdateTicks);
+        textTask = Bukkit.getScheduler().runTaskTimer(plugin, this::updateTexts, ticks, ticks);
     }
 
-    private void tick() {
-        tick++;
-        boolean updateText = tick % Math.max(1, settings.playerHologramUpdateTicks
-                / Math.max(1, settings.playerHologramMoveTicks)) == 0;
+    private void updateTexts() {
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (ignored(player)) {
                 remove(player);
                 continue;
             }
-            ArmorStand stand = stands.get(player.getUniqueId());
-            if (stand == null || !stand.isValid()) {
+            TextDisplay display = displays.get(player.getUniqueId());
+            if (display == null || !display.isValid()) {
                 spawn(player);
-                stand = stands.get(player.getUniqueId());
-                if (stand == null) continue;
+                continue;
             }
-            Location target = player.getLocation().add(0, settings.playerHologramHeight, 0);
-            stand.teleport(target);
-            stand.setFireTicks(0);
-            if (updateText) {
-                stand.setCustomName(text(player));
+            if (!player.getPassengers().contains(display)) {
+                player.addPassenger(display);
             }
+            display.text(LegacyComponentSerializer.legacySection().deserialize(text(player)));
+            // TextDisplay is visible by default = false, so only other players see it.
         }
     }
 
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
-        Bukkit.getScheduler().runTaskLater(plugin, () -> spawn(event.getPlayer()), 20L);
+        Player player = event.getPlayer();
+        Bukkit.getScheduler().runTaskLater(plugin, () -> spawn(player), 20L);
+        // New viewers must be explicitly shown existing displays.
+        for (Map.Entry<UUID, TextDisplay> entry : displays.entrySet()) {
+            if (entry.getKey().equals(player.getUniqueId())) continue;
+            TextDisplay display = entry.getValue();
+            if (display != null && display.isValid()) player.showEntity(plugin, display);
+        }
     }
 
     @EventHandler
@@ -102,38 +109,48 @@ public final class PlayerHolograms implements Listener {
         remove(event.getPlayer());
     }
 
-    private void spawn(Player player) {
-        if (!settings.playerHologramsEnabled || ignored(player)) return;
-        ArmorStand existing = stands.get(player.getUniqueId());
-        if (existing != null && existing.isValid()) return;
-        Location location = player.getLocation().add(0, settings.playerHologramHeight, 0);
-        World world = location.getWorld();
-        if (world == null) return;
-        ArmorStand stand = world.spawn(location, ArmorStand.class, entity -> {
-            entity.setInvisible(true);
-            entity.setMarker(true);
-            entity.setSmall(true);
-            entity.setGravity(false);
-            entity.setBasePlate(false);
-            entity.setArms(false);
-            entity.setInvulnerable(true);
-            entity.setSilent(true);
+    private void spawn(Player owner) {
+        if (!settings.playerHologramsEnabled || ignored(owner)) return;
+        TextDisplay old = displays.remove(owner.getUniqueId());
+        if (old != null && old.isValid()) old.remove();
+
+        TextDisplay display = owner.getWorld().spawn(owner.getLocation(), TextDisplay.class, entity -> {
+            entity.setVisibleByDefault(false);
             entity.setPersistent(false);
-            entity.setCustomNameVisible(true);
-            entity.setCanPickupItems(false);
-            entity.setCollidable(false);
-            entity.setCustomName(text(player));
+            entity.setInvulnerable(true);
+            entity.setGravity(false);
+            entity.setSilent(true);
+            entity.setBillboard(Display.Billboard.CENTER);
+            entity.setAlignment(TextDisplay.TextAlignment.CENTER);
+            entity.setShadowed(false);
+            entity.setSeeThrough(false);
+            entity.setDefaultBackground(false);
+            entity.setBackgroundColor(Color.fromARGB(0, 0, 0, 0));
+            entity.setLineWidth(220);
+            entity.setViewRange(1.0f);
+            entity.setTransformation(new Transformation(
+                    new Vector3f(0.0f, (float) settings.playerHologramHeight, 0.0f),
+                    new Quaternionf(), new Vector3f(1.0f, 1.0f, 1.0f), new Quaternionf()));
+            entity.text(LegacyComponentSerializer.legacySection().deserialize(text(owner)));
         });
-        stands.put(player.getUniqueId(), stand);
+        displays.put(owner.getUniqueId(), display);
+        owner.addPassenger(display);
+        owner.hideEntity(plugin, display);
+        for (Player viewer : Bukkit.getOnlinePlayers()) {
+            if (!viewer.getUniqueId().equals(owner.getUniqueId())) {
+                viewer.showEntity(plugin, display);
+            }
+        }
     }
 
-    private void remove(Player player) {
-        ArmorStand stand = stands.remove(player.getUniqueId());
-        if (stand != null && stand.isValid()) stand.remove();
+    private void remove(Player owner) {
+        TextDisplay display = displays.remove(owner.getUniqueId());
+        if (display != null && display.isValid()) display.remove();
     }
 
     private boolean ignored(Player player) {
-        return !settings.playerHologramsEnabled || settings.playerHologramIgnoredWorlds.contains(player.getWorld().getName());
+        return !settings.playerHologramsEnabled
+                || settings.playerHologramIgnoredWorlds.contains(player.getWorld().getName());
     }
 
     private String text(Player player) {
