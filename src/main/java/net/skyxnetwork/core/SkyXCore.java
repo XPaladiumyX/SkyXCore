@@ -78,7 +78,7 @@ public final class SkyXCore extends JavaPlugin {
         getServer().getPluginManager().registerEvents(guildGui, this);
         playerHolograms = new PlayerHolograms(this, settings);
         playerHolograms.start();
-        getServer().getPluginManager().registerEvents(new RtpPassengerDetachListener(), this);
+        getServer().getPluginManager().registerEvents(new RtpPassengerDetachListener(this), this);
         economy = new EconomyHook();
 
         registerCommands();
