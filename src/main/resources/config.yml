@@ -171,12 +171,13 @@ guilds:
     bank-weight: 0.001
 
 holograms:
-  # A packet-optimized TextDisplay passenger above every player. It follows
-  # the player exactly and is hidden from its owner (first-person/F5).
-  # Height is the offset in blocks from the player's passenger anchor.
-  # 0.30 = a small gap above the vanilla nametag; negative values move it down.
+  # Two independent TextDisplays: Java viewers use the Java height and
+  # Bedrock/Geyser viewers use the Bedrock height. Both are positioned at an
+  # absolute offset above the player's eyes (never as passengers, so looking
+  # up/down cannot move them). 0.70 gives a small gap above the nametag.
   enabled: true
-  height: 0.30
+  height: 0.70
+  bedrock-height: 0.70
   update-interval-ticks: 20
   move-interval-ticks: 5
   format: "&6%lighteconomy_money%₪ &8| &c%skyxcore_pvp_kills% PvP"
