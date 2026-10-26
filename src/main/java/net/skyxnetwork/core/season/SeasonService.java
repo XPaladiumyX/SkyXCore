@@ -36,6 +36,29 @@ public final class SeasonService implements Listener {
     public void start() {
         Bukkit.getPluginManager().registerEvents(this, plugin);
         ensureSeason();
+        Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, this::refreshActiveSeason, 1200L, 1200L);
+    }
+
+    /** Keeps both backend servers on the same active season. */
+    private void refreshActiveSeason() {
+        try (Connection connection = database.open();
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT id,ends_at FROM " + database.table("seasons")
+                             + " WHERE status='ACTIVE' ORDER BY started_at DESC LIMIT 1")) {
+            statement.setQueryTimeout(5);
+            try (ResultSet result = statement.executeQuery()) {
+                if (result.next()) {
+                    String id = result.getString(1);
+                    currentSeasonId = id;
+                    currentEndsAt = result.getLong(2);
+                } else {
+                    currentSeasonId = null;
+                    currentEndsAt = 0;
+                }
+            }
+        } catch (SQLException exception) {
+            plugin.getLogger().fine("Could not refresh active season: " + exception.getMessage());
+        }
     }
 
     public void updateSettings(CoreSettings settings) {
