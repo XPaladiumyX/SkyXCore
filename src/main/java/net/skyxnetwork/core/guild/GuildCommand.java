@@ -41,7 +41,7 @@ public final class GuildCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         if (args.length == 0) {
-            info(player, player.getName());
+            plugin.getGuildGui().open(player);
             return true;
         }
         switch (args[0].toLowerCase(Locale.ROOT)) {
@@ -115,6 +115,14 @@ public final class GuildCommand implements CommandExecutor, TabCompleter {
             }
             case "bank" -> {
                 bank(player, args);
+                return true;
+            }
+            case "tag" -> {
+                if (args.length < 2) {
+                    player.sendMessage(plugin.prefixed("guild-usage"));
+                    return true;
+                }
+                setTag(player, args[1]);
                 return true;
             }
             case "info" -> {
@@ -497,6 +505,26 @@ public final class GuildCommand implements CommandExecutor, TabCompleter {
         });
     }
 
+    private void setTag(Player player, String rawTag) {
+        async(() -> {
+            Guild.Info guild = plugin.getGuildService().guildByPlayer(player.getUniqueId());
+            Guild.Member member = plugin.getGuildService().member(player.getUniqueId());
+            if (guild == null || member == null || member.role() != Guild.Role.LEADER) return null;
+            GuildService.Result result = plugin.getGuildService().setTag(guild.id(), rawTag);
+            return new TagResult(result);
+        }, result -> {
+            if (result == null) {
+                player.sendMessage(plugin.prefixed("guild-leader-only"));
+            } else if (result.result() == GuildService.Result.NAME_TAKEN) {
+                player.sendMessage(plugin.prefixed("guild-tag-taken"));
+            } else if (result.result() == GuildService.Result.OK) {
+                player.sendMessage(plugin.prefixed("guild-tag-set", "%tag%", rawTag));
+            } else {
+                player.sendMessage(plugin.prefixed("guild-tag-invalid"));
+            }
+        });
+    }
+
     private void info(Player player, String name) {
         async(() -> {
             Guild.Info guild = plugin.getGuildService().guildByPlayer(player.getUniqueId());
@@ -566,7 +594,8 @@ public final class GuildCommand implements CommandExecutor, TabCompleter {
             String prefix = args[0].toLowerCase();
             List<String> result = new ArrayList<>();
             for (String value : List.of("help", "create", "invite", "accept", "leave", "kick",
-                    "promote", "demote", "disband", "chat", "sethome", "home", "bank", "info", "top")) {
+                    "promote", "demote", "disband", "chat", "sethome", "home", "bank", "tag",
+                    "info", "top")) {
                 if (value.startsWith(prefix)) result.add(value);
             }
             return result;
@@ -583,6 +612,9 @@ public final class GuildCommand implements CommandExecutor, TabCompleter {
     }
 
     private record BankContext(Guild.Info guild, Guild.Member member) {
+    }
+
+    private record TagResult(GuildService.Result result) {
     }
 
     private record InviteResult(Guild.Info guild, GuildService.Result result) {

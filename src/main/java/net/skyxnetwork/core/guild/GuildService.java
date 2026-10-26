@@ -5,6 +5,7 @@ import net.skyxnetwork.core.core.CoreSettings;
 import net.skyxnetwork.core.core.Database;
 import net.skyxnetwork.core.core.PlayerRegistry;
 import net.skyxnetwork.core.season.SeasonService;
+import org.bukkit.ChatColor;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -42,6 +43,8 @@ public final class GuildService {
     private final PlayerRegistry players;
     private final SeasonService seasons;
     private volatile CoreSettings settings;
+    private volatile Map<UUID, Guild.Info> tagCache = Map.of();
+    private volatile Map<UUID, Guild.Member> memberCache = Map.of();
 
     public GuildService(SkyXCore plugin, Database database, PlayerRegistry players,
                         SeasonService seasons, CoreSettings settings) {
@@ -52,8 +55,80 @@ public final class GuildService {
         this.settings = settings;
     }
 
+    public void start() {
+        refreshTagCacheAsync();
+    }
+
     public void updateSettings(CoreSettings settings) {
         this.settings = settings;
+    }
+
+    /** Cached guild tag/name for PlaceholderAPI and chat/TAB formatting. */
+    public String tag(UUID uuid) {
+        Guild.Info guild = tagCache.get(uuid);
+        return guild == null ? "" : "&8[" + guild.tag() + "&8]";
+    }
+
+    public String plainTag(UUID uuid) {
+        Guild.Info guild = tagCache.get(uuid);
+        return guild == null ? "" : ChatColor.stripColor(ChatColor.translateAlternateColorCodes('&', guild.tag()));
+    }
+
+    public String tagMini(UUID uuid) {
+        Guild.Info guild = tagCache.get(uuid);
+        if (guild == null) return "";
+        return mini("&8[" + guild.tag() + "&8]");
+    }
+
+    public String guildName(UUID uuid) {
+        Guild.Info guild = tagCache.get(uuid);
+        return guild == null ? "" : guild.name();
+    }
+
+    public double guildPower(UUID uuid) {
+        Guild.Info guild = tagCache.get(uuid);
+        return guild == null ? 0 : guild.power();
+    }
+
+    public void refreshTagCacheAsync() {
+        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, this::refreshTagCache);
+    }
+
+    private void refreshTagCache() {
+        Map<UUID, Guild.Info> tags = new HashMap<>();
+        Map<UUID, Guild.Member> members = new HashMap<>();
+        for (Guild.Info guild : allGuilds()) {
+            for (Guild.Member member : members(guild.id())) {
+                tags.put(member.uuid(), guild);
+                members.put(member.uuid(), member);
+            }
+        }
+        tagCache = Map.copyOf(tags);
+        memberCache = Map.copyOf(members);
+    }
+
+    public Guild.Info cachedGuild(UUID uuid) {
+        return tagCache.get(uuid);
+    }
+
+    public Guild.Member cachedMember(UUID uuid) {
+        return memberCache.get(uuid);
+    }
+
+    private String mini(String legacy) {
+        String value = ChatColor.translateAlternateColorCodes('&', legacy);
+        value = value.replace("\u00a70", "<black>").replace("\u00a71", "<dark_blue>")
+                .replace("\u00a72", "<dark_green>").replace("\u00a73", "<dark_aqua>")
+                .replace("\u00a74", "<dark_red>").replace("\u00a75", "<dark_purple>")
+                .replace("\u00a76", "<gold>").replace("\u00a77", "<gray>")
+                .replace("\u00a78", "<dark_gray>").replace("\u00a79", "<blue>")
+                .replace("\u00a7a", "<green>").replace("\u00a7b", "<aqua>")
+                .replace("\u00a7c", "<red>").replace("\u00a7d", "<light_purple>")
+                .replace("\u00a7e", "<yellow>").replace("\u00a7f", "<white>")
+                .replace("\u00a7l", "<bold>").replace("\u00a7o", "<italic>")
+                .replace("\u00a7n", "<underlined>").replace("\u00a7m", "<strikethrough>")
+                .replace("\u00a7r", "<reset>");
+        return value + "<reset>";
     }
 
     public Guild.Info guildByPlayer(UUID uuid) {
@@ -126,9 +201,15 @@ public final class GuildService {
     public Outcome create(String name, String tag, UUID leader) {
         String cleanName = name == null ? "" : name.trim();
         String cleanTag = tag == null ? "" : tag.trim();
+        String visibleTag = ChatColor.stripColor(ChatColor.translateAlternateColorCodes('&', cleanTag));
         if (!cleanName.matches("[A-Za-z0-9_ ]{" + settings.guildNameMin + "," + settings.guildNameMax + "}")
-                || !cleanTag.matches("[A-Za-z0-9]{" + settings.guildTagMin + "," + settings.guildTagMax + "}")) {
+                || !visibleTag.matches("[A-Za-z0-9]{" + settings.guildTagMin + "," + settings.guildTagMax + "}")
+                || cleanTag.length() > 32) {
             return new Outcome(Result.INVALID, null);
+        }
+        for (Guild.Info existing : allGuilds()) {
+            String existingTag = ChatColor.stripColor(ChatColor.translateAlternateColorCodes('&', existing.tag()));
+            if (existingTag.equalsIgnoreCase(visibleTag)) return new Outcome(Result.NAME_TAKEN, null);
         }
         if (guildByPlayer(leader) != null) return new Outcome(Result.ALREADY_IN_GUILD, null);
         try (Connection connection = database.open()) {
@@ -164,6 +245,7 @@ public final class GuildService {
                     member.executeUpdate();
                 }
                 connection.commit();
+                refreshTagCacheAsync();
                 return new Outcome(Result.OK, guildById(id));
             } catch (SQLException exception) {
                 connection.rollback();
@@ -248,15 +330,19 @@ public final class GuildService {
                          "SELECT COUNT(*) FROM " + database.table("guild_members") + " WHERE guild_id=?")) {
                 invite.setInt(1, guild.id());
                 invite.setString(2, player.toString());
-                long expires;
+                long expires = 0;
+                boolean invited = false;
                 try (ResultSet result = invite.executeQuery()) {
-                    if (!result.next()) {
-                        connection.rollback();
-                        return new Outcome(Result.NO_INVITE, guild);
+                    if (result.next()) {
+                        invited = true;
+                        expires = result.getLong(1);
                     }
-                    expires = result.getLong(1);
                 }
-                if (expires < System.currentTimeMillis()) {
+                if (!invited && !guild.open()) {
+                    connection.rollback();
+                    return new Outcome(Result.NO_INVITE, guild);
+                }
+                if (invited && expires < System.currentTimeMillis()) {
                     connection.rollback();
                     return new Outcome(Result.NO_INVITE, guild);
                 }
@@ -281,6 +367,7 @@ public final class GuildService {
                     remove.executeUpdate();
                 }
                 connection.commit();
+                refreshTagCacheAsync();
                 return new Outcome(Result.OK, guild);
             } catch (SQLException exception) {
                 connection.rollback();
@@ -301,6 +388,7 @@ public final class GuildService {
                      "DELETE FROM " + database.table("guild_members") + " WHERE uuid=?")) {
             statement.setString(1, player.toString());
             statement.executeUpdate();
+            refreshTagCacheAsync();
             return Result.OK;
         } catch (SQLException exception) {
             return Result.INVALID;
@@ -313,6 +401,7 @@ public final class GuildService {
                      "DELETE FROM " + database.table("guild_members") + " WHERE uuid=?")) {
             statement.setString(1, target.toString());
             statement.executeUpdate();
+            refreshTagCacheAsync();
             return Result.OK;
         } catch (SQLException exception) {
             return Result.INVALID;
@@ -326,6 +415,7 @@ public final class GuildService {
             statement.setString(1, role.name());
             statement.setString(2, target.toString());
             statement.executeUpdate();
+            refreshTagCacheAsync();
             return Result.OK;
         } catch (SQLException exception) {
             return Result.INVALID;
@@ -348,11 +438,51 @@ public final class GuildService {
                 guild.setInt(1, guildId);
                 guild.executeUpdate();
                 connection.commit();
+                refreshTagCacheAsync();
                 return Result.OK;
             } catch (SQLException exception) {
                 connection.rollback();
                 throw exception;
             }
+        } catch (SQLException exception) {
+            return Result.INVALID;
+        }
+    }
+
+    public Result setDescription(int guildId, String description) {
+        String clean = description == null ? "" : description.trim();
+        if (clean.length() > 120) clean = clean.substring(0, 120);
+        try (Connection connection = database.open();
+             PreparedStatement statement = connection.prepareStatement(
+                     "UPDATE " + database.table("guilds") + " SET description=? WHERE id=?")) {
+            statement.setString(1, clean);
+            statement.setInt(2, guildId);
+            statement.executeUpdate();
+            refreshTagCacheAsync();
+            return Result.OK;
+        } catch (SQLException exception) {
+            return Result.INVALID;
+        }
+    }
+
+    public Result setTag(int guildId, String rawTag) {
+        String cleanTag = rawTag == null ? "" : rawTag.trim();
+        String visible = ChatColor.stripColor(ChatColor.translateAlternateColorCodes('&', cleanTag));
+        if (!visible.matches("[A-Za-z0-9]{" + settings.guildTagMin + "," + settings.guildTagMax + "}")
+                || cleanTag.length() > 32) return Result.INVALID;
+        for (Guild.Info existing : allGuilds()) {
+            if (existing.id() == guildId) continue;
+            String existingTag = ChatColor.stripColor(ChatColor.translateAlternateColorCodes('&', existing.tag()));
+            if (existingTag.equalsIgnoreCase(visible)) return Result.NAME_TAKEN;
+        }
+        try (Connection connection = database.open();
+             PreparedStatement statement = connection.prepareStatement(
+                     "UPDATE " + database.table("guilds") + " SET tag=? WHERE id=?")) {
+            statement.setString(1, cleanTag);
+            statement.setInt(2, guildId);
+            statement.executeUpdate();
+            refreshTagCacheAsync();
+            return Result.OK;
         } catch (SQLException exception) {
             return Result.INVALID;
         }

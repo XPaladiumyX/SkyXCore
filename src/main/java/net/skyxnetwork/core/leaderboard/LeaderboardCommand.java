@@ -14,6 +14,7 @@ import java.util.List;
 public final class LeaderboardCommand implements CommandExecutor, TabCompleter {
 
     private final SkyXCore plugin;
+    private final java.util.Map<java.util.UUID, Long> cooldowns = new java.util.concurrent.ConcurrentHashMap<>();
 
     public LeaderboardCommand(SkyXCore plugin) {
         this.plugin = plugin;
@@ -24,6 +25,17 @@ public final class LeaderboardCommand implements CommandExecutor, TabCompleter {
         if (!(sender instanceof Player player)) {
             sender.sendMessage(plugin.message("player-only"));
             return true;
+        }
+        int cooldown = plugin.getSettings().leaderboardCommandCooldownSeconds;
+        if (cooldown > 0 && !player.hasPermission("skyxcore.admin")) {
+            long now = System.currentTimeMillis();
+            Long until = cooldowns.get(player.getUniqueId());
+            if (until != null && until > now) {
+                long remaining = Math.max(1L, (until - now + 999) / 1000);
+                player.sendMessage(plugin.prefixed("leaderboard-cooldown", "%seconds%", Long.toString(remaining)));
+                return true;
+            }
+            cooldowns.put(player.getUniqueId(), now + cooldown * 1000L);
         }
         if (!plugin.getSettings().leaderboardsEnabled) {
             player.sendMessage(plugin.prefixed("leaderboard-empty"));

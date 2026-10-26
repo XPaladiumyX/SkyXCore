@@ -54,6 +54,7 @@ public final class StatsService implements Listener {
     private volatile CoreSettings settings;
 
     private final Map<UUID, Map<String, Long>> pending = new ConcurrentHashMap<>();
+    private final Map<UUID, Map<String, Long>> cached = new ConcurrentHashMap<>();
     private final Map<String, Long> pvpCooldowns = new ConcurrentHashMap<>();
     private BukkitTask flushTask;
 
@@ -104,6 +105,8 @@ public final class StatsService implements Listener {
         String season = seasonId();
         if (season == null || season.isBlank()) return;
         pending.computeIfAbsent(player.getUniqueId(), ignored -> new ConcurrentHashMap<>())
+                .merge(category, amount, Long::sum);
+        cached.computeIfAbsent(player.getUniqueId(), ignored -> new ConcurrentHashMap<>())
                 .merge(category, amount, Long::sum);
         players.remember(player.getUniqueId(), player.getName());
     }
@@ -236,6 +239,27 @@ public final class StatsService implements Listener {
         if (first.getAddress() == null || second.getAddress() == null) return false;
         return first.getAddress().getAddress().getHostAddress()
                 .equals(second.getAddress().getAddress().getHostAddress());
+    }
+
+    @EventHandler
+    public void onJoin(org.bukkit.event.player.PlayerJoinEvent event) {
+        UUID uuid = event.getPlayer().getUniqueId();
+        Bukkit.getScheduler().runTaskLaterAsynchronously(plugin, () -> {
+            Map<String, Long> values = current(uuid);
+            values.putAll(pending.getOrDefault(uuid, Map.of()));
+            cached.put(uuid, new ConcurrentHashMap<>(values));
+        }, 20L);
+    }
+
+    public long cachedValue(UUID uuid, String category) {
+        Map<String, Long> values = cached.get(uuid);
+        if (values != null) return values.getOrDefault(category, 0L);
+        Map<String, Long> pendingValues = pending.get(uuid);
+        return pendingValues == null ? 0L : pendingValues.getOrDefault(category, 0L);
+    }
+
+    public void clearCache() {
+        cached.clear();
     }
 
     public Map<String, Long> current(UUID uuid) {

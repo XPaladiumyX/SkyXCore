@@ -1,15 +1,18 @@
 package net.skyxnetwork.core;
 
+import me.clip.placeholderapi.PlaceholderAPI;
 import net.skyxnetwork.core.core.CoreSettings;
 import net.skyxnetwork.core.core.Database;
 import net.skyxnetwork.core.core.PlayerRegistry;
 import net.skyxnetwork.core.guild.EconomyHook;
 import net.skyxnetwork.core.guild.GuildCommand;
+import net.skyxnetwork.core.guild.GuildGui;
 import net.skyxnetwork.core.guild.GuildService;
 import net.skyxnetwork.core.leaderboard.LeaderboardCommand;
 import net.skyxnetwork.core.leaderboard.LeaderboardGui;
 import net.skyxnetwork.core.leaderboard.LeaderboardRepository;
 import net.skyxnetwork.core.leaderboard.LeaderboardService;
+import net.skyxnetwork.core.placeholder.SkyXCoreExpansion;
 import net.skyxnetwork.core.season.SeasonCommand;
 import net.skyxnetwork.core.season.SeasonService;
 import net.skyxnetwork.core.stats.StatsService;
@@ -32,8 +35,10 @@ public final class SkyXCore extends JavaPlugin {
     private LeaderboardService leaderboardService;
     private LeaderboardGui leaderboardGui;
     private GuildService guildService;
+    private GuildGui guildGui;
     private EconomyHook economy;
     private BukkitTask powerTask;
+    private SkyXCoreExpansion placeholderExpansion;
 
     @Override
     public void onEnable() {
@@ -65,9 +70,13 @@ public final class SkyXCore extends JavaPlugin {
         leaderboardGui = new LeaderboardGui(this, leaderboardService, playerRegistry, settings);
         getServer().getPluginManager().registerEvents(leaderboardGui, this);
         guildService = new GuildService(this, database, playerRegistry, seasonService, settings);
+        guildService.start();
+        guildGui = new GuildGui(this, guildService, settings);
+        getServer().getPluginManager().registerEvents(guildGui, this);
         economy = new EconomyHook();
 
         registerCommands();
+        registerPlaceholderApi();
         startPowerTask();
 
         getLogger().info("SkyXCore enabled (server=" + settings.serverId
@@ -79,6 +88,12 @@ public final class SkyXCore extends JavaPlugin {
     public void onDisable() {
         if (powerTask != null) powerTask.cancel();
         if (statsService != null) statsService.stop();
+        if (placeholderExpansion != null) {
+            try {
+                PlaceholderAPI.unregisterExpansion(placeholderExpansion);
+            } catch (Throwable ignored) {
+            }
+        }
         getLogger().info("SkyXCore disabled.");
     }
 
@@ -95,6 +110,18 @@ public final class SkyXCore extends JavaPlugin {
             SeasonCommand command = new SeasonCommand(this);
             getCommand("skyxcore").setExecutor(command);
             getCommand("skyxcore").setTabCompleter(command);
+        }
+    }
+
+    private void registerPlaceholderApi() {
+        if (getServer().getPluginManager().getPlugin("PlaceholderAPI") == null) return;
+        try {
+            placeholderExpansion = new SkyXCoreExpansion(this);
+            if (placeholderExpansion.register()) {
+                getLogger().info("Registered SkyXCore PlaceholderAPI expansion.");
+            }
+        } catch (Throwable exception) {
+            getLogger().warning("Could not register SkyXCore PlaceholderAPI expansion: " + exception.getMessage());
         }
     }
 
@@ -167,6 +194,10 @@ public final class SkyXCore extends JavaPlugin {
 
     public GuildService getGuildService() {
         return guildService;
+    }
+
+    public GuildGui getGuildGui() {
+        return guildGui;
     }
 
     public EconomyHook getEconomy() {

@@ -56,6 +56,7 @@ public final class CoreSettings {
 
     public final boolean leaderboardsEnabled;
     public final int pageSize;
+    public final int leaderboardCommandCooldownSeconds;
     public final List<Category> categories;
     public final Map<String, Category> categoryById;
 
@@ -111,7 +112,8 @@ public final class CoreSettings {
         bosses = Set.copyOf(config.getStringList("stats.bosses"));
 
         leaderboardsEnabled = config.getBoolean("leaderboards.enabled", true);
-        pageSize = clamp(config.getInt("leaderboards.page-size", 10), 1, 21);
+        pageSize = clamp(config.getInt("leaderboards.page-size", 10), 1, 10);
+        leaderboardCommandCooldownSeconds = clamp(config.getInt("leaderboards.command-cooldown-seconds", 2), 0, 60);
         List<Category> parsedCategories = new ArrayList<>();
         ConfigurationSection categoriesSection = config.getConfigurationSection("leaderboards.categories");
         if (categoriesSection != null) {

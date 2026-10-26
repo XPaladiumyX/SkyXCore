@@ -138,6 +138,7 @@ public final class Database {
                     + "claimed BOOLEAN NOT NULL DEFAULT 0,"
                     + "PRIMARY KEY (season_id, category, rank_position)"
                     + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+            statement.execute("ALTER TABLE " + guilds + " MODIFY tag VARCHAR(32) NOT NULL;");
         }
     }
 

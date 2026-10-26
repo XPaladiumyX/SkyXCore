@@ -81,6 +81,7 @@ stats:
 leaderboards:
   enabled: true
   page-size: 10
+  command-cooldown-seconds: 2
   cache-seconds: 0
   categories:
     money:
@@ -252,6 +253,7 @@ messages:
   leaderboard-page: "&7Page &f%page%&7/&f%pages%"
   leaderboard-yours: "&7Your rank: &e#%rank% &7- &f%value%"
   leaderboard-not-ranked: "&7You are not ranked yet."
+  leaderboard-cooldown: "&cPlease wait %seconds%s before using /leadb again."
   leaderboard-click: "&eClick to open"
   gui-close: "&cClose"
   gui-previous: "&ePrevious page"
@@ -296,6 +298,10 @@ messages:
   guild-bank-no-money: "&cYou do not have enough money."
   guild-bank-no-funds: "&cThe guild bank does not have enough money."
   guild-bank-no-permission: "&cOnly the leader and officers can withdraw."
+  guild-tag-set: "&aGuild tag set to %tag%&a."
+  guild-tag-invalid: "&cInvalid tag. Use 3-8 visible characters and legacy color codes."
+  guild-tag-taken: "&cThat visible guild tag is already used."
+  guild-description-set: "&aGuild description updated."
   guild-info: "&8&m------ &d%guild% &8&m------\n&7Tag: &f%tag%\n&7Leader: &f%leader%\n&7Members: &f%members%&7/&f%max%\n&7Power: &e%power%\n&7Bank: &e%bank%"
   guild-top-header: "&8&m------ &dTop Guilds &8&m------"
   guild-top-line: "&e#%rank% &f%guild% &7- &d%power% power"

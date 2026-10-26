@@ -25,12 +25,12 @@ import java.util.UUID;
 public final class LeaderboardGui implements Listener {
 
     private static final int[] ENTRY_SLOTS = {
-            10, 11, 12, 13, 14, 15, 16,
-            19, 20, 21, 22, 23, 24, 25,
-            28, 29, 30, 31, 32, 33, 34
+            12, 13, 14, 15, 16,
+            21, 22, 23, 24, 25
     };
-    private static final int VIEWER_SLOT = 40;
+    private static final int VIEWER_SLOT = 31;
     private static final int PREVIOUS_SLOT = 45;
+    private static final int BACK_SLOT = 48;
     private static final int CLOSE_SLOT = 49;
     private static final int NEXT_SLOT = 53;
 
@@ -60,7 +60,7 @@ public final class LeaderboardGui implements Listener {
         for (int slot = 0; slot < 54; slot++) inventory.setItem(slot, filler);
 
         int index = 0;
-        int[] slots = {10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34};
+        int[] slots = {12, 13, 14, 21, 22, 23, 30, 31, 32};
         for (CoreSettings.Category category : settings.categories) {
             if (index >= slots.length) break;
             List<String> lore = List.of(
@@ -129,6 +129,7 @@ public final class LeaderboardGui implements Listener {
             inventory.setItem(NEXT_SLOT, item(settings.guiNext,
                     "&eNext page", List.of(), false));
         }
+        inventory.setItem(BACK_SLOT, item(Material.ARROW, "&eBack to categories", List.of(), false));
         inventory.setItem(CLOSE_SLOT, item(settings.guiClose,
                 "&cClose", List.of(), false));
         player.openInventory(inventory);
@@ -189,7 +190,7 @@ public final class LeaderboardGui implements Listener {
                 player.closeInventory();
                 return;
             }
-            int[] slots = {10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34};
+            int[] slots = {12, 13, 14, 21, 22, 23, 30, 31, 32};
             int index = indexOf(slots, slot);
             if (index < 0 || index >= settings.categories.size()) return;
             openCategory(player, settings.categories.get(index), 0);
@@ -203,6 +204,10 @@ public final class LeaderboardGui implements Listener {
         }
         if (slot == CLOSE_SLOT) {
             player.closeInventory();
+            return;
+        }
+        if (slot == BACK_SLOT) {
+            openCategories(player);
             return;
         }
         if (slot == PREVIOUS_SLOT) {

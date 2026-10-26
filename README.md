@@ -9,7 +9,7 @@ SkyXCore is designed for **Paper 1.21+**, including the current **1.21.8** and *
 ### Leaderboards
 - `/leaderboard` / `/leadb` opens a category menu.
 - Categories are configurable and currently include Money, Playtime, Guilds, PvP Kills, Crops Broken, Mob Kills, Blocks Broken, Boss Damage and Job Points.
-- Every category uses paginated player heads (or guild banners), with the top 10 visible per page by default and unlimited page navigation.
+- Categories are centered on a 3x3 menu; top pages use two centered rows of five heads, a back button and unlimited page navigation.
 - The viewer's own rank is shown in the header and as a grey head when it is outside the current page.
 - Money, Playtime and Job Points are read directly from their existing MySQL databases.
 - PvP kills, mob kills, crops, blocks and boss damage are tracked by SkyXCore from Bukkit events.
@@ -25,6 +25,8 @@ SkyXCore is designed for **Paper 1.21+**, including the current **1.21.8** and *
 - Guild chat, home, bank and roles.
 - Power calculation with configurable weights for members, PvP, bosses, mobs, crops, blocks, playtime and bank.
 - Top guilds category in the leaderboard GUI.
+- Player-friendly guild GUI (`/guild`) with members, invites, bank, home, settings, tag colors, top and leave/disband actions.
+- Guild tag prefixes in chat and TAB; legacy color codes are supported in tags.
 - Guilds are shared across Survival and Farmlands through MySQL.
 
 ### Seasons
@@ -32,7 +34,7 @@ SkyXCore is designed for **Paper 1.21+**, including the current **1.21.8** and *
 - `/skyxcore season start` and `/skyxcore season end` with confirmation.
 - Top 5 per category is captured into `skyxcore_season_results`.
 - Configurable reward commands per category/rank are queued in `skyxcore_season_rewards` and delivered when the player joins.
-- Stats are scoped by season; starting a season clears that season's old stats/results/rewards.
+- Stats are scoped by season; starting a season clears that season's old stats/results/rewards. It does **not** reset economy, playtime, Jobs or worlds — those must be reset by the existing season/reset scripts. For a normal season change, run `/skyxcore season end confirm` first (captures top 5 and queues rewards), reset the other systems separately, then run `/skyxcore season start <new-id> confirm`.
 
 ### Hot configuration
 `/skyxcore reload` reloads categories, messages, anti-farm rules, power weights, rewards and module switches without restarting the server. Database connection changes still require a restart.
@@ -42,13 +44,23 @@ SkyXCore is designed for **Paper 1.21+**, including the current **1.21.8** and *
 | Command | Permission | Description |
 |---|---|---|
 | `/leaderboard [category] [page]` | `skyxcore.use` | Open leaderboards. Aliases: `/leadb`, `/lb`, `/tops`. |
-| `/guild ...` | `skyxcore.guild` | Guild commands. Aliases: `/guilds`, `/g`. |
+| `/guild` | `skyxcore.guild` | Open the guild GUI. Aliases: `/guilds`, `/g`. |
+| `/guild ...` | `skyxcore.guild` | Text command fallbacks for creation, invites, bank, etc. |
 | `/guild chat <message>` | `skyxcore.guild` | Guild chat. |
 | `/guild bank balance|deposit|withdraw` | `skyxcore.guild` | Guild bank. |
 | `/skyxcore reload` | `skyxcore.admin` | Reload config. |
 | `/skyxcore status` | `skyxcore.admin` | Database/module status. |
 | `/skyxcore season start <id> confirm` | `skyxcore.admin.season` | Start a season. |
 | `/skyxcore season end confirm` | `skyxcore.admin.season` | End the season and queue top 5 rewards. |
+
+## Display integration
+
+- `/leadb` has a configurable command cooldown (2 seconds by default; admins bypass it).
+- The TAB header contains a compact line with guild tag, Money, PvP kills and bounty.
+- The Survival sidebar shows rank, guild, Money, playtime, Job points, next playtime reward, PvP kills, boss damage, bounty and online count.
+- LPC reads `%skyxcore_guild_tag%`/`%skyxcore_guild_tag_mini%` for chat.
+- TAB reads `%skyxcore_guild_tag%` for the tablist prefix and nametag prefix.
+- Available SkyXCore PAPI placeholders: `%skyxcore_guild_tag%`, `_plain`, `_mini`, `_name`, `_power`, `%skyxcore_pvp_kills%`, `%skyxcore_mob_kills%`, `%skyxcore_crops_broken%`, `%skyxcore_blocks_broken%`, `%skyxcore_boss_damage%` and `%skyxcore_season%`.
 
 ## Configuration
 
