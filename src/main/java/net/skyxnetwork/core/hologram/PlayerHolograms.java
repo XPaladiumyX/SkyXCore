@@ -1,5 +1,9 @@
 package net.skyxnetwork.core.hologram;
 
+import com.comphenix.protocol.PacketType;
+import com.comphenix.protocol.ProtocolLibrary;
+import com.comphenix.protocol.events.PacketContainer;
+
 import me.clip.placeholderapi.PlaceholderAPI;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
@@ -8,7 +12,9 @@ import net.skyxnetwork.core.core.CoreSettings;
 import org.bukkit.Bukkit;
 import org.bukkit.Color;
 import org.bukkit.Location;
+import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Display;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.TextDisplay;
@@ -50,7 +56,6 @@ public final class PlayerHolograms implements Listener {
     private final Class<?> gsitApiClass;
     private final Method gsitIsSitting;
     private BukkitTask textTask;
-    private BukkitTask positionTask;
     private BukkitTask visibilityTask;
 
     public PlayerHolograms(SkyXCore plugin, CoreSettings settings) {
@@ -98,16 +103,13 @@ public final class PlayerHolograms implements Listener {
         if (!settings.playerHologramsEnabled) return;
         long textTicks = Math.max(5L, settings.playerHologramUpdateTicks);
         textTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tickText, textTicks, textTicks);
-        positionTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tickPosition, 1L, 1L);
         visibilityTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tickVisibility, 5L, 5L);
     }
 
     private void cancelTasks() {
         if (textTask != null) textTask.cancel();
-        if (positionTask != null) positionTask.cancel();
         if (visibilityTask != null) visibilityTask.cancel();
         textTask = null;
-        positionTask = null;
         visibilityTask = null;
     }
 
@@ -123,13 +125,6 @@ public final class PlayerHolograms implements Listener {
                 continue;
             }
             updateText(player, pd);
-        }
-    }
-
-    private void tickPosition() {
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            PlayerDisplays pd = displays.get(player.getUniqueId());
-            if (pd != null && !pd.hidden && pd.valid(player)) updateLocation(player, pd);
         }
     }
 
@@ -164,8 +159,7 @@ public final class PlayerHolograms implements Listener {
             Player player = event.getPlayer();
             PlayerDisplays pd = displays.get(player.getUniqueId());
             if (pd == null) return;
-            if (!pd.sameWorld(player)) spawn(player);
-            else updateLocation(player, pd);
+            spawn(player);
         }, 1L);
     }
 
@@ -210,30 +204,22 @@ public final class PlayerHolograms implements Listener {
         if (!settings.playerHologramsEnabled || ignored(owner)) return;
         remove(owner);
 
-        Location javaLocation = target(owner, settings.playerHologramHeight);
-        Location bedrockLocation = target(owner, settings.playerHologramBedrockHeight);
-        TextDisplay javaDisplay = create(owner, javaLocation);
-        TextDisplay bedrockDisplay = create(owner, bedrockLocation);
-        PlayerDisplays pd = new PlayerDisplays(owner.getUniqueId(), javaDisplay, bedrockDisplay);
+        TextDisplay javaDisplay = create(owner, settings.playerHologramHeight);
+        ArmorStand bedrockAnchor = createAnchor(owner);
+        TextDisplay bedrockDisplay = create(owner, settings.playerHologramBedrockHeight);
+        PlayerDisplays pd = new PlayerDisplays(owner.getUniqueId(), javaDisplay, bedrockAnchor, bedrockDisplay);
         pd.hidden = true;
         displays.put(owner.getUniqueId(), pd);
         updateText(owner, pd);
 
         owner.hideEntity(plugin, javaDisplay);
+        owner.hideEntity(plugin, bedrockAnchor);
         owner.hideEntity(plugin, bedrockDisplay);
         updateVisibility(owner, pd);
     }
 
-    private Location target(Player owner, double height) {
-        Location eye = owner.getEyeLocation();
-        Location target = eye.clone().add(0, height, 0);
-        target.setYaw(0.0f);
-        target.setPitch(0.0f);
-        return target;
-    }
-
-    private TextDisplay create(Player owner, Location location) {
-        return owner.getWorld().spawn(location, TextDisplay.class, entity -> {
+    private TextDisplay create(Player owner, double height) {
+        return owner.getWorld().spawn(owner.getLocation(), TextDisplay.class, entity -> {
             entity.setVisibleByDefault(false);
             entity.setPersistent(false);
             entity.setInvulnerable(true);
@@ -247,29 +233,26 @@ public final class PlayerHolograms implements Listener {
             entity.setBackgroundColor(Color.fromARGB(0, 0, 0, 0));
             entity.setLineWidth(220);
             entity.setViewRange(1.0f);
-            entity.setTeleportDuration(1);
+            entity.setTeleportDuration(0);
             entity.setTransformation(new Transformation(
-                    new Vector3f(), new Quaternionf(), new Vector3f(1.0f, 1.0f, 1.0f), new Quaternionf()));
+                    new Vector3f(0.0f, (float) height, 0.0f),
+                    new Quaternionf(), new Vector3f(1.0f, 1.0f, 1.0f), new Quaternionf()));
         });
     }
 
-    private void updateLocation(Player owner, PlayerDisplays pd) {
-        if (!pd.sameWorld(owner)) return;
-        Location javaTarget = target(owner, settings.playerHologramHeight);
-        Location bedrockTarget = target(owner, settings.playerHologramBedrockHeight);
-        move(pd.javaDisplay, javaTarget);
-        move(pd.bedrockDisplay, bedrockTarget);
-    }
-
-    private void move(TextDisplay display, Location target) {
-        if (display == null || !display.isValid()) return;
-        if (display.getWorld() != target.getWorld()) {
-            display.teleport(target);
-            return;
-        }
-        if (display.getLocation().distanceSquared(target) > 1.0E-4D) {
-            display.teleport(target);
-        }
+    private ArmorStand createAnchor(Player owner) {
+        return owner.getWorld().spawn(owner.getLocation(), ArmorStand.class, entity -> {
+            entity.setVisibleByDefault(false);
+            entity.setPersistent(false);
+            entity.setInvulnerable(true);
+            entity.setGravity(false);
+            entity.setSilent(true);
+            entity.setMarker(true);
+            entity.setInvisible(true);
+            entity.setSmall(true);
+            entity.setBasePlate(false);
+            entity.setArms(false);
+        });
     }
 
     private void updateText(Player player, PlayerDisplays pd) {
@@ -306,7 +289,6 @@ public final class PlayerHolograms implements Listener {
 
     private void showLine(Player owner, PlayerDisplays pd) {
         if (pd.hidden) return;
-        updateLocation(owner, pd);
         for (Player viewer : Bukkit.getOnlinePlayers()) {
             if (!viewer.getUniqueId().equals(pd.ownerId)) show(viewer, pd);
         }
@@ -316,19 +298,48 @@ public final class PlayerHolograms implements Listener {
         if (pd.hidden || viewer.getUniqueId().equals(pd.ownerId)) return;
         Player owner = Bukkit.getPlayer(pd.ownerId);
         if (owner == null || viewer.getWorld() != owner.getWorld()) return;
-        updateLocation(owner, pd);
+        try {
+            Location location = owner.getLocation();
+            if (pd.javaDisplay != null && pd.javaDisplay.isValid()) pd.javaDisplay.teleport(location);
+            if (pd.bedrockAnchor != null && pd.bedrockAnchor.isValid()) pd.bedrockAnchor.teleport(location);
+            if (pd.bedrockDisplay != null && pd.bedrockDisplay.isValid()) pd.bedrockDisplay.teleport(location);
+        } catch (Throwable ignored) {
+            // The display will be respawned on the next tick if its world unloaded.
+        }
         if (isBedrock(viewer)) {
-            if (pd.bedrockDisplay != null && pd.bedrockDisplay.isValid()) {
-                viewer.showEntity(plugin, pd.bedrockDisplay);
-            }
+            if (pd.bedrockAnchor != null && pd.bedrockAnchor.isValid()) viewer.showEntity(plugin, pd.bedrockAnchor);
+            if (pd.bedrockDisplay != null && pd.bedrockDisplay.isValid()) viewer.showEntity(plugin, pd.bedrockDisplay);
         } else if (pd.javaDisplay != null && pd.javaDisplay.isValid()) {
             viewer.showEntity(plugin, pd.javaDisplay);
         }
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (!viewer.isOnline() || pd.hidden || owner == null || !pd.valid(owner)
+                    || viewer.getWorld() != owner.getWorld()) return;
+            if (isBedrock(viewer)) {
+                mount(viewer, owner, pd.bedrockAnchor);
+                mount(viewer, pd.bedrockAnchor, pd.bedrockDisplay);
+            } else {
+                mount(viewer, owner, pd.javaDisplay);
+            }
+        });
     }
 
     private void hide(Player viewer, PlayerDisplays pd) {
         if (pd.javaDisplay != null && pd.javaDisplay.isValid()) viewer.hideEntity(plugin, pd.javaDisplay);
+        if (pd.bedrockAnchor != null && pd.bedrockAnchor.isValid()) viewer.hideEntity(plugin, pd.bedrockAnchor);
         if (pd.bedrockDisplay != null && pd.bedrockDisplay.isValid()) viewer.hideEntity(plugin, pd.bedrockDisplay);
+    }
+
+    private void mount(Player viewer, Entity vehicle, Entity passenger) {
+        if (vehicle == null || passenger == null || !passenger.isValid()) return;
+        try {
+            PacketContainer packet = new PacketContainer(PacketType.Play.Server.MOUNT);
+            packet.getIntegers().write(0, vehicle.getEntityId());
+            packet.getIntegerArrays().write(0, new int[]{passenger.getEntityId()});
+            ProtocolLibrary.getProtocolManager().sendServerPacket(viewer, packet);
+        } catch (Throwable exception) {
+            plugin.getLogger().warning("Could not send hologram mount packet: " + exception.getMessage());
+        }
     }
 
     private boolean isBedrock(Player player) {
@@ -373,31 +384,36 @@ public final class PlayerHolograms implements Listener {
     private static final class PlayerDisplays {
         private final UUID ownerId;
         private final TextDisplay javaDisplay;
+        private final ArmorStand bedrockAnchor;
         private final TextDisplay bedrockDisplay;
         private Component text;
         private volatile boolean hidden;
 
-        private PlayerDisplays(UUID ownerId, TextDisplay javaDisplay, TextDisplay bedrockDisplay) {
+        private PlayerDisplays(UUID ownerId, TextDisplay javaDisplay, ArmorStand bedrockAnchor,
+                               TextDisplay bedrockDisplay) {
             this.ownerId = ownerId;
             this.javaDisplay = javaDisplay;
+            this.bedrockAnchor = bedrockAnchor;
             this.bedrockDisplay = bedrockDisplay;
         }
 
         private boolean valid(Player owner) {
-            return javaDisplay != null && bedrockDisplay != null
-                    && javaDisplay.isValid() && bedrockDisplay.isValid()
+            return javaDisplay != null && bedrockAnchor != null && bedrockDisplay != null
+                    && javaDisplay.isValid() && bedrockAnchor.isValid() && bedrockDisplay.isValid()
                     && sameWorld(owner);
         }
 
         private boolean sameWorld(Player owner) {
-            return javaDisplay != null && bedrockDisplay != null
+            return javaDisplay != null && bedrockAnchor != null && bedrockDisplay != null
                     && javaDisplay.getWorld() == owner.getWorld()
+                    && bedrockAnchor.getWorld() == owner.getWorld()
                     && bedrockDisplay.getWorld() == owner.getWorld();
         }
 
         private void remove() {
             if (javaDisplay != null && javaDisplay.isValid()) javaDisplay.remove();
             if (bedrockDisplay != null && bedrockDisplay.isValid()) bedrockDisplay.remove();
+            if (bedrockAnchor != null && bedrockAnchor.isValid()) bedrockAnchor.remove();
         }
     }
 }
