@@ -132,7 +132,7 @@ public final class CoreSettings {
         playerHologramUpdateTicks = clamp(config.getInt("holograms.update-interval-ticks", 20), 5, 200);
         playerHologramMoveTicks = clamp(config.getInt("holograms.move-interval-ticks", 5), 1, 40);
         playerHologramFormat = config.getString("holograms.format",
-                "&6%lighteconomy_money%₪ &8| &c%skyxcore_pvp_kills% PvP");
+                "&6%lighteconomy_money%₪ &8| &c⚔ %skyxcore_pvp_kills% Kills &8| &eBounty %notbounties_bounty_formatted%");
         playerHologramIgnoredWorlds = Set.copyOf(config.getStringList("holograms.ignored-worlds"));
         List<Category> parsedCategories = new ArrayList<>();
         ConfigurationSection categoriesSection = config.getConfigurationSection("leaderboards.categories");

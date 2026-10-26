@@ -24,7 +24,6 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
@@ -144,16 +143,6 @@ public final class PlayerHolograms implements Listener {
             PlayerDisplays pd = displays.get(player.getUniqueId());
             if (pd != null && pd.valid(player)) updateVisibility(player, pd);
         }
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void onMove(PlayerMoveEvent event) {
-        Location from = event.getFrom();
-        Location to = event.getTo();
-        if (to == null) return;
-        if (from.getX() == to.getX() && from.getY() == to.getY() && from.getZ() == to.getZ()) return;
-        PlayerDisplays pd = displays.get(event.getPlayer().getUniqueId());
-        if (pd != null) keepNearOwner(event.getPlayer(), pd);
     }
 
     @EventHandler
@@ -294,10 +283,10 @@ public final class PlayerHolograms implements Listener {
         // entity-tracking radius. This avoids the client briefly showing a
         // newly spawned display at the player's old spawn point before its
         // client-side mount packet is applied.
-        if (pd.javaDisplay.getLocation().distanceSquared(location) > 1.0E-4D) {
+        if (pd.javaDisplay.getLocation().distanceSquared(location) > 64.0 * 64.0) {
             pd.javaDisplay.teleport(location);
         }
-        if (pd.bedrockAnchor.getLocation().distanceSquared(location) > 1.0E-4D) {
+        if (pd.bedrockAnchor.getLocation().distanceSquared(location) > 64.0 * 64.0) {
             pd.bedrockAnchor.teleport(location);
             pd.bedrockDisplay.teleport(location);
         }

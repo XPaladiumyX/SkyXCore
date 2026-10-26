@@ -181,7 +181,7 @@ holograms:
   bedrock-height: 0.55
   update-interval-ticks: 20
   move-interval-ticks: 5
-  format: "&6%lighteconomy_money%₪ &8| &c%skyxcore_pvp_kills% PvP"
+  format: "&6%lighteconomy_money%₪ &8| &c⚔ %skyxcore_pvp_kills% Kills &8| &eBounty %notbounties_bounty_formatted%"
   ignored-worlds: []
 
 season:
