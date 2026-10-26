@@ -136,7 +136,7 @@ leaderboards:
 
 guilds:
   enabled: true
-  create-cost: 25000
+  create-cost: 10000
   tag-min-length: 3
   tag-max-length: 8
   name-min-length: 3
