@@ -171,13 +171,14 @@ guilds:
     bank-weight: 0.001
 
 holograms:
-  # Two independent TextDisplays: Java viewers use the Java height and
-  # Bedrock/Geyser viewers use the Bedrock height. Both are positioned at an
-  # absolute offset above the player's eyes (never as passengers, so looking
-  # up/down cannot move them). 0.70 gives a small gap above the nametag.
+  # Two independent passenger TextDisplays. The Java display rides the
+  # player directly; the Bedrock display rides an invisible marker armor stand
+  # so Geyser keeps it stable and allows a separate height. Height values are
+  # passenger translation offsets in blocks. 0.55 is a small gap above the
+  # vanilla nametag.
   enabled: true
-  height: 0.70
-  bedrock-height: 0.70
+  height: 0.55
+  bedrock-height: 0.55
   update-interval-ticks: 20
   move-interval-ticks: 5
   format: "&6%lighteconomy_money%₪ &8| &c%skyxcore_pvp_kills% PvP"

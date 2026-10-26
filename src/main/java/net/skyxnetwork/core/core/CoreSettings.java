@@ -126,7 +126,7 @@ public final class CoreSettings {
         leaderboardGuiClickDelayMs = clamp(config.getInt("leaderboards.gui-click-delay-ms", 300), 0, 5000);
 
         playerHologramsEnabled = config.getBoolean("holograms.enabled", true);
-        playerHologramHeight = Math.max(-2.0, Math.min(5.0, config.getDouble("holograms.height", 0.70)));
+        playerHologramHeight = Math.max(-2.0, Math.min(5.0, config.getDouble("holograms.height", 0.55)));
         playerHologramBedrockHeight = Math.max(-2.0, Math.min(5.0,
                 config.getDouble("holograms.bedrock-height", playerHologramHeight)));
         playerHologramUpdateTicks = clamp(config.getInt("holograms.update-interval-ticks", 20), 5, 200);

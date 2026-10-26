@@ -29,7 +29,7 @@ SkyXCore is designed for **Paper 1.21+**, including the current **1.21.8** and *
 - Player-friendly guild GUI (`/guild`) with members, invites, bank, home, settings, tag colors, top and leave/disband actions.
 - Guild tag prefixes in chat and TAB; legacy color codes are supported in tags.
 - A `?` guide in the guild GUI explains every power source and how to increase power.
-- Two absolute TextDisplays (one for Java viewers, one for Bedrock viewers) show Money and PvP kills above the in-game nametag. They are not passengers, so looking up/down cannot move them, and each platform has its own height setting.
+- Two passenger TextDisplays show Money and PvP kills above the in-game nametag. Java viewers see a display mounted directly on the player; Bedrock viewers see a display mounted on an invisible marker armor stand. The Bedrock marker isolates Geyser from player head rotation, and each platform has its own height setting.
 - Guilds are shared across Survival and Farmlands through MySQL.
 
 ### Seasons
@@ -60,7 +60,7 @@ SkyXCore is designed for **Paper 1.21+**, including the current **1.21.8** and *
 
 - `/leadb` has a configurable command cooldown (2 seconds by default; admins bypass it).
 - The Survival sidebar is a compact 10-line layout using a new animated wave divider.
-- The in-game per-player line is the only above-nametag stats display; TAB handles guild tags in the list/nametag. The line updates only when the player actually moves, and Java/Bedrock use separate height settings.
+- The in-game per-player line is the only above-nametag stats display; TAB handles guild tags in the list/nametag. Both instances are passengers, so they follow the player with no movement task, and Java/Bedrock use separate height settings.
 - LPC reads `%skyxcore_guild_tag%`/`%skyxcore_guild_tag_mini%` for chat.
 - TAB reads `%skyxcore_guild_tag%` for the tablist prefix and nametag prefix.
 - Available SkyXCore PAPI placeholders: `%skyxcore_guild_tag%`, `_plain`, `_mini`, `_name`, `_power`, `%skyxcore_pvp_kills%`, `%skyxcore_mob_kills%`, `%skyxcore_crops_broken%`, `%skyxcore_blocks_broken%`, `%skyxcore_boss_damage%` and `%skyxcore_season%`.
