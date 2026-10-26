@@ -23,7 +23,6 @@ import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
-import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
@@ -36,9 +35,7 @@ import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
 import java.lang.reflect.Method;
-import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -64,10 +61,7 @@ public final class PlayerHolograms implements Listener {
     private final Map<UUID, PlayerDisplays> displays = new ConcurrentHashMap<>();
     private final Map<UUID, Boolean> bedrockCache = new ConcurrentHashMap<>();
     private final boolean protocolLib;
-    private static final Set<String> TELEPORT_COMMANDS = Set.of(
-            "tp", "teleport", "spawn", "hub", "lobby", "rtp", "tpa", "tpahere",
-            "tpaccept", "warp", "home", "back", "wild", "randomtp", "is", "island",
-            "visit", "server");
+
     private final Class<?> gsitApiClass;
     private final Method gsitIsSitting;
     private BukkitTask textTask;
@@ -168,41 +162,12 @@ public final class PlayerHolograms implements Listener {
         remove(event.getPlayer());
     }
 
-    @EventHandler(priority = EventPriority.LOWEST)
+    @EventHandler
     public void onTeleport(PlayerTeleportEvent event) {
-        PlayerDisplays pd = displays.get(event.getPlayer().getUniqueId());
-        if (pd != null && pd.javaDisplay != null && pd.javaDisplay.isValid()) {
-            // A server-side passenger must be removed before the teleport.
-            pd.javaDisplay.remove();
-        }
-        if (event.isCancelled()) {
-            Bukkit.getScheduler().runTaskLater(plugin, () -> spawn(event.getPlayer()), 2L);
-            return;
-        }
+        if (event.isCancelled()) return;
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             if (event.getPlayer().isOnline()) spawn(event.getPlayer());
         }, 2L);
-    }
-
-    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
-    public void onTeleportCommand(PlayerCommandPreprocessEvent event) {
-        String message = event.getMessage();
-        if (!message.startsWith("/")) return;
-        String[] parts = message.substring(1).toLowerCase(Locale.ROOT).split("\\s+");
-        if (parts.length == 0) return;
-        String command = parts[0];
-        int colon = command.indexOf(':');
-        if (colon >= 0) command = command.substring(colon + 1);
-        boolean teleport = TELEPORT_COMMANDS.contains(command)
-                || (command.equals("guild") && parts.length > 1 && parts[1].equals("home"));
-        if (!teleport) return;
-        PlayerDisplays pd = displays.get(event.getPlayer().getUniqueId());
-        if (pd != null && pd.javaDisplay != null && pd.javaDisplay.isValid()) {
-            pd.javaDisplay.remove();
-        }
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            if (event.getPlayer().isOnline()) spawn(event.getPlayer());
-        }, 40L);
     }
 
     @EventHandler
@@ -252,10 +217,6 @@ public final class PlayerHolograms implements Listener {
         remove(owner);
 
         TextDisplay javaDisplay = create(owner, settings.playerHologramHeight);
-        // The Java display is always a real passenger. The command and
-        // teleport guards remove it before any teleport, so this does not
-        // block /spawn, /hub, /rtp or plugin teleports.
-        owner.addPassenger(javaDisplay);
         ArmorStand bedrockAnchor = createAnchor(owner);
         TextDisplay bedrockDisplay = create(owner, settings.playerHologramBedrockHeight);
         PlayerDisplays pd = new PlayerDisplays(owner.getUniqueId(), javaDisplay, bedrockAnchor, bedrockDisplay);
@@ -362,6 +323,7 @@ public final class PlayerHolograms implements Listener {
         // Only the Bedrock entities need the fallback position sync.
         try {
             Location location = owner.getLocation();
+            if (pd.javaDisplay != null && pd.javaDisplay.isValid()) pd.javaDisplay.teleport(location);
             if (pd.bedrockAnchor != null && pd.bedrockAnchor.isValid()) pd.bedrockAnchor.teleport(location);
             if (pd.bedrockDisplay != null && pd.bedrockDisplay.isValid()) pd.bedrockDisplay.teleport(location);
         } catch (Throwable ignored) {
@@ -378,6 +340,7 @@ public final class PlayerHolograms implements Listener {
             mount(viewer, pd.bedrockAnchor, pd.bedrockDisplay);
         } else if (pd.javaDisplay != null && pd.javaDisplay.isValid()) {
             viewer.showEntity(plugin, pd.javaDisplay);
+            mount(viewer, owner, pd.javaDisplay);
         }
     }
 
