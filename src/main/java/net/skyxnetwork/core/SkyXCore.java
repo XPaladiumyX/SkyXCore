@@ -8,6 +8,7 @@ import net.skyxnetwork.core.guild.EconomyHook;
 import net.skyxnetwork.core.guild.GuildCommand;
 import net.skyxnetwork.core.guild.GuildGui;
 import net.skyxnetwork.core.hologram.PlayerHolograms;
+import net.skyxnetwork.core.hologram.SitCompatibilityListener;
 import net.skyxnetwork.core.guild.GuildService;
 import net.skyxnetwork.core.leaderboard.LeaderboardCommand;
 import net.skyxnetwork.core.leaderboard.LeaderboardGui;
@@ -77,6 +78,7 @@ public final class SkyXCore extends JavaPlugin {
         getServer().getPluginManager().registerEvents(guildGui, this);
         playerHolograms = new PlayerHolograms(this, settings);
         playerHolograms.start();
+        getServer().getPluginManager().registerEvents(new SitCompatibilityListener(), this);
         economy = new EconomyHook();
 
         registerCommands();
