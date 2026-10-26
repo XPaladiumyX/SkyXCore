@@ -125,11 +125,11 @@ public final class CoreSettings {
         leaderboardGuiClickDelayMs = clamp(config.getInt("leaderboards.gui-click-delay-ms", 300), 0, 5000);
 
         playerHologramsEnabled = config.getBoolean("holograms.enabled", true);
-        playerHologramHeight = Math.max(1.0, Math.min(5.0, config.getDouble("holograms.height", 2.55)));
+        playerHologramHeight = Math.max(-2.0, Math.min(5.0, config.getDouble("holograms.height", 0.30)));
         playerHologramUpdateTicks = clamp(config.getInt("holograms.update-interval-ticks", 20), 5, 200);
         playerHologramMoveTicks = clamp(config.getInt("holograms.move-interval-ticks", 5), 1, 40);
         playerHologramFormat = config.getString("holograms.format",
-                "&6%lighteconomy_money%₪ &8| &c%skyxcore_pvp_kills% PvP &8| &eBounty %notbounties_bounty_formatted%");
+                "&6%lighteconomy_money%₪ &8| &c%skyxcore_pvp_kills% PvP");
         playerHologramIgnoredWorlds = Set.copyOf(config.getStringList("holograms.ignored-worlds"));
         List<Category> parsedCategories = new ArrayList<>();
         ConfigurationSection categoriesSection = config.getConfigurationSection("leaderboards.categories");
