@@ -258,8 +258,8 @@ gui:
   close: "BARRIER"
 
 messages:
-  stats-kill-same-ip: "&cKill non compté : vous êtes sur la même IP que la victime (anti-farm)."
-  stats-kill-cooldown: "&cKill non compté : cette victime a déjà été tuée récemment (anti-farm). Réessayez dans %seconds%s."
+  stats-kill-same-ip: "&cKill not counted: you share the same IP as the victim (anti-farm)."
+  stats-kill-cooldown: "&cKill not counted: this victim was killed recently (anti-farm). Try again in %seconds%s."
   prefix: "&8[&dSkyXCore&8] &r"
   no-permission: "&cYou do not have permission to do that."
   player-only: "&cThis command can only be used by a player."
