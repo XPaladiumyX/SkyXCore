@@ -14,6 +14,7 @@ import org.bukkit.Location;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Display;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.TextDisplay;
 import org.bukkit.event.EventHandler;
@@ -28,11 +29,13 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.event.player.PlayerToggleSneakEvent;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Transformation;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
+import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -59,7 +62,10 @@ public final class PlayerHolograms implements Listener {
     private final Map<UUID, PlayerDisplays> displays = new ConcurrentHashMap<>();
     private final Map<UUID, Boolean> bedrockCache = new ConcurrentHashMap<>();
     private final boolean protocolLib;
+    private final Class<?> gsitApiClass;
+    private final Method gsitIsSitting;
     private BukkitTask textTask;
+    private BukkitTask visibilityTask;
 
     public PlayerHolograms(SkyXCore plugin, CoreSettings settings) {
         this.plugin = plugin;
@@ -68,6 +74,20 @@ public final class PlayerHolograms implements Listener {
         if (!protocolLib) {
             plugin.getLogger().warning("ProtocolLib is not installed; player stat holograms are disabled.");
         }
+        Class<?> apiClass = null;
+        Method isSitting = null;
+        Plugin gsit = Bukkit.getPluginManager().getPlugin("GSit");
+        if (gsit != null) {
+            try {
+                apiClass = gsit.getClass().getClassLoader().loadClass("dev.geco.gsit.api.GSitAPI");
+                isSitting = apiClass.getMethod("isSitting", LivingEntity.class);
+            } catch (Throwable ignored) {
+                apiClass = null;
+                isSitting = null;
+            }
+        }
+        this.gsitApiClass = apiClass;
+        this.gsitIsSitting = isSitting;
     }
 
     public void start() {
@@ -81,7 +101,9 @@ public final class PlayerHolograms implements Listener {
     public void stop() {
         HandlerList.unregisterAll(this);
         if (textTask != null) textTask.cancel();
+        if (visibilityTask != null) visibilityTask.cancel();
         textTask = null;
+        visibilityTask = null;
         for (PlayerDisplays pd : displays.values()) pd.remove();
         displays.clear();
     }
@@ -97,6 +119,7 @@ public final class PlayerHolograms implements Listener {
         if (!settings.playerHologramsEnabled || !protocolLib) return;
         long ticks = Math.max(5L, settings.playerHologramUpdateTicks);
         textTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tick, ticks, ticks);
+        visibilityTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tickVisibility, 5L, 5L);
     }
 
     private void tick() {
@@ -111,7 +134,15 @@ public final class PlayerHolograms implements Listener {
                 continue;
             }
             keepNearOwner(player, pd);
+            updateVisibility(player, pd);
             updateText(player, pd);
+        }
+    }
+
+    private void tickVisibility() {
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            PlayerDisplays pd = displays.get(player.getUniqueId());
+            if (pd != null && pd.valid(player)) updateVisibility(player, pd);
         }
     }
 
@@ -208,17 +239,14 @@ public final class PlayerHolograms implements Listener {
         ArmorStand bedrockAnchor = createAnchor(owner);
         TextDisplay bedrockDisplay = create(owner, settings.playerHologramBedrockHeight);
         PlayerDisplays pd = new PlayerDisplays(owner.getUniqueId(), javaDisplay, bedrockAnchor, bedrockDisplay);
+        pd.hidden = true;
         displays.put(owner.getUniqueId(), pd);
         updateText(owner, pd);
 
         owner.hideEntity(plugin, javaDisplay);
         owner.hideEntity(plugin, bedrockAnchor);
         owner.hideEntity(plugin, bedrockDisplay);
-        for (Player viewer : Bukkit.getOnlinePlayers()) {
-            if (!viewer.getUniqueId().equals(owner.getUniqueId())) {
-                show(viewer, pd);
-            }
-        }
+        updateVisibility(owner, pd);
     }
 
     private TextDisplay create(Player owner, double height) {
@@ -268,6 +296,23 @@ public final class PlayerHolograms implements Listener {
         if (pd.bedrockAnchor.getLocation().distanceSquared(location) > 24.0 * 24.0) {
             pd.bedrockAnchor.teleport(location);
             pd.bedrockDisplay.teleport(location);
+        }
+    }
+
+    private void updateVisibility(Player owner, PlayerDisplays pd) {
+        boolean hidden = owner.isDead() || owner.isSneaking() || owner.isInsideVehicle() || isSitting(owner);
+        if (pd.hidden == hidden) return;
+        pd.hidden = hidden;
+        if (hidden) hideLine(pd);
+        else showLine(owner, pd);
+    }
+
+    private boolean isSitting(Player player) {
+        if (gsitApiClass == null || gsitIsSitting == null) return false;
+        try {
+            return Boolean.TRUE.equals(gsitIsSitting.invoke(null, player));
+        } catch (Throwable ignored) {
+            return false;
         }
     }
 

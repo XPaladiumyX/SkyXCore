@@ -183,11 +183,18 @@ public final class StatsService implements Listener {
         Player victim = event.getEntity();
         Player killer = victim.getKiller();
         if (killer == null || killer.getUniqueId().equals(victim.getUniqueId())) return;
-        if (settings.pvpBlockSameIp && sameIp(killer, victim)) return;
+        if (settings.pvpBlockSameIp && sameIp(killer, victim)) {
+            killer.sendMessage(plugin.prefixed("stats-kill-same-ip"));
+            return;
+        }
         String key = killer.getUniqueId() + ":" + victim.getUniqueId();
         long now = System.currentTimeMillis();
         Long last = pvpCooldowns.get(key);
-        if (last != null && now - last < settings.pvpKillCooldownSeconds * 1000L) return;
+        if (last != null && now - last < settings.pvpKillCooldownSeconds * 1000L) {
+            long remaining = Math.max(1L, (settings.pvpKillCooldownSeconds * 1000L - (now - last) + 999L) / 1000L);
+            killer.sendMessage(plugin.prefixed("stats-kill-cooldown", "%seconds%", Long.toString(remaining)));
+            return;
+        }
         pvpCooldowns.put(key, now);
         add(killer, PVP_KILLS, 1);
     }

@@ -57,7 +57,7 @@ stats:
     # A player cannot farm the same victim repeatedly within this window.
     pvp-min-kill-interval-seconds: 300
     # Do not count kills where both players share the same IP.
-    pvp-block-same-ip: false
+    pvp-block-same-ip: true
     # Do not count mobs spawned by spawners.
     ignore-spawner-mobs: true
   crops:
@@ -258,6 +258,8 @@ gui:
   close: "BARRIER"
 
 messages:
+  stats-kill-same-ip: "&cKill non compté : vous êtes sur la même IP que la victime (anti-farm)."
+  stats-kill-cooldown: "&cKill non compté : cette victime a déjà été tuée récemment (anti-farm). Réessayez dans %seconds%s."
   prefix: "&8[&dSkyXCore&8] &r"
   no-permission: "&cYou do not have permission to do that."
   player-only: "&cThis command can only be used by a player."
