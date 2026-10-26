@@ -1,5 +1,6 @@
 package net.skyxnetwork.core.hologram;
 
+import net.kyori.adventure.text.Component;
 import net.skyxnetwork.core.SkyXCore;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -44,8 +45,14 @@ public final class RtpPassengerDetachListener implements Listener {
     public void onRtpCommand(PlayerCommandPreprocessEvent event) {
         String message = event.getMessage().trim().toLowerCase();
         if (!isTrackedTeleportCommand(message)) return;
-        pendingRtpTeleports.put(event.getPlayer().getUniqueId(), System.currentTimeMillis() + RTP_RESYNC_WINDOW_MS);
-        detach(event.getPlayer());
+        Player player = event.getPlayer();
+        if (player.isDead() || player.getHealth() <= 0.0) {
+            event.setCancelled(true);
+            player.sendMessage(Component.text("§cTu dois respawn avant de pouvoir te téléporter."));
+            return;
+        }
+        pendingRtpTeleports.put(player.getUniqueId(), System.currentTimeMillis() + RTP_RESYNC_WINDOW_MS);
+        detach(player);
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
