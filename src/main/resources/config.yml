@@ -1,0 +1,315 @@
+# SkyXCore 0.1.0
+# Competitive core: stats, leaderboards, guilds and seasons.
+# The repository config is a template. Put real credentials only in the
+# server-side config, never commit them to GitHub.
+
+database:
+  host: "127.0.0.1"
+  port: 3306
+  name: "s29_skyxcore"
+  user: "CHANGE_ME"
+  password: "CHANGE_ME"
+  table-prefix: "skyxcore"
+  connection-timeout-ms: 5000
+  socket-timeout-ms: 8000
+
+network:
+  # Identifies this backend in logs; the shared database is still used by both.
+  server-id: "survival"
+
+sources:
+  # Money/Playtime/Jobs are read-only external sources. Their credentials are
+  # intentionally separate from the SkyXCore database.
+  money:
+    enabled: true
+    host: "127.0.0.1"
+    port: 3306
+    database: "s29_eco"
+    user: "CHANGE_ME"
+    password: "CHANGE_ME"
+    table: "MoneyTable"
+  playtime:
+    enabled: true
+    host: "127.0.0.1"
+    port: 3306
+    database: "s29_playtime"
+    user: "CHANGE_ME"
+    password: "CHANGE_ME"
+    table: "skyx_playtime_players"
+  jobs:
+    enabled: true
+    host: "127.0.0.1"
+    port: 3306
+    database: "s29_jobs"
+    user: "CHANGE_ME"
+    password: "CHANGE_ME"
+    users-table: "jobs_users"
+    points-table: "jobs_points"
+
+stats:
+  enabled: true
+  # Stats are accumulated in memory and written in async batches.
+  flush-interval-seconds: 15
+  ignore-creative: true
+  ignored-worlds:
+    - "world_parkour"
+  anti-farm:
+    # A player cannot farm the same victim repeatedly within this window.
+    pvp-min-kill-interval-seconds: 300
+    # Do not count kills where both players share the same IP.
+    pvp-block-same-ip: true
+    # Do not count mobs spawned by spawners.
+    ignore-spawner-mobs: true
+  crops:
+    - WHEAT
+    - CARROTS
+    - POTATOES
+    - BEETROOTS
+    - NETHER_WART
+    - PUMPKIN
+    - MELON
+    - SUGAR_CANE
+    - CACTUS
+    - BAMBOO
+    - KELP
+    - COCOA
+  bosses:
+    - ENDER_DRAGON
+    - WITHER
+    - WARDEN
+
+leaderboards:
+  enabled: true
+  page-size: 10
+  cache-seconds: 0
+  categories:
+    money:
+      display: "&6Money"
+      icon: GOLD_INGOT
+      source: MONEY
+      format: MONEY
+    playtime:
+      display: "&9Playtime"
+      icon: CLOCK
+      source: PLAYTIME
+      format: TIME
+    guilds:
+      display: "&dTop Guilds"
+      icon: SHIELD
+      source: GUILDS
+      format: NUMBER
+    pvp_kills:
+      display: "&cPvP Kills"
+      icon: IRON_SWORD
+      source: STATS
+      stat: PVP_KILLS
+      format: NUMBER
+    crops_broken:
+      display: "&aCrops Broken"
+      icon: WHEAT
+      source: STATS
+      stat: CROPS_BROKEN
+      format: NUMBER
+    mob_kills:
+      display: "&2Mob Kills"
+      icon: ROTTEN_FLESH
+      source: STATS
+      stat: MOB_KILLS
+      format: NUMBER
+    blocks_broken:
+      display: "&7Blocks Broken"
+      icon: STONE
+      source: STATS
+      stat: BLOCKS_BROKEN
+      format: NUMBER
+    boss_damage:
+      display: "&5Boss Damage"
+      icon: DRAGON_HEAD
+      source: STATS
+      stat: BOSS_DAMAGE
+      format: NUMBER
+    job_points:
+      display: "&eJob Points"
+      icon: EXPERIENCE_BOTTLE
+      source: JOBS
+      format: NUMBER
+
+guilds:
+  enabled: true
+  create-cost: 25000
+  tag-min-length: 3
+  tag-max-length: 8
+  name-min-length: 3
+  name-max-length: 24
+  default-max-members: 16
+  invite-expire-seconds: 120
+  chat-format: "&8[&d%tag%&8] &f%player%&7: &f%message%"
+  home:
+    enabled: true
+    warmup-seconds: 5
+    cooldown-seconds: 120
+  bank:
+    enabled: true
+  power:
+    # Power = members * member-weight
+    #       + sum(PvP kills * pvp-weight)
+    #       + sum(boss damage * boss-weight)
+    #       + sum(mob kills * mob-weight)
+    #       + sum(crops * crop-weight)
+    #       + sum(blocks * block-weight)
+    #       + sum(playtime hours * playtime-weight)
+    #       + bank * bank-weight
+    member-weight: 100
+    pvp-weight: 10
+    boss-weight: 0.01
+    mob-weight: 0.2
+    crop-weight: 0.05
+    block-weight: 0.01
+    playtime-weight: 2
+    bank-weight: 0.001
+
+season:
+  enabled: true
+  current-id: "S6"
+  length-days: 180
+  auto-start: true
+  # Season rewards are configurable console commands per category/rank.
+  # Player categories use %player%; guild categories use %player% as the
+  # guild leader's name. Empty lists disable that reward row.
+  rewards:
+    money:
+      1: ["eco give %player% 25000"]
+      2: ["eco give %player% 15000"]
+      3: ["eco give %player% 10000"]
+      4: ["eco give %player% 7500"]
+      5: ["eco give %player% 5000"]
+    playtime:
+      1: ["eco give %player% 25000"]
+      2: ["eco give %player% 15000"]
+      3: ["eco give %player% 10000"]
+      4: ["eco give %player% 7500"]
+      5: ["eco give %player% 5000"]
+    guilds:
+      1: ["eco give %player% 25000"]
+      2: ["eco give %player% 15000"]
+      3: ["eco give %player% 10000"]
+      4: ["eco give %player% 7500"]
+      5: ["eco give %player% 5000"]
+    pvp_kills:
+      1: ["eco give %player% 25000"]
+      2: ["eco give %player% 15000"]
+      3: ["eco give %player% 10000"]
+      4: ["eco give %player% 7500"]
+      5: ["eco give %player% 5000"]
+    crops_broken:
+      1: ["eco give %player% 25000"]
+      2: ["eco give %player% 15000"]
+      3: ["eco give %player% 10000"]
+      4: ["eco give %player% 7500"]
+      5: ["eco give %player% 5000"]
+    mob_kills:
+      1: ["eco give %player% 25000"]
+      2: ["eco give %player% 15000"]
+      3: ["eco give %player% 10000"]
+      4: ["eco give %player% 7500"]
+      5: ["eco give %player% 5000"]
+    blocks_broken:
+      1: ["eco give %player% 25000"]
+      2: ["eco give %player% 15000"]
+      3: ["eco give %player% 10000"]
+      4: ["eco give %player% 7500"]
+      5: ["eco give %player% 5000"]
+    boss_damage:
+      1: ["eco give %player% 25000"]
+      2: ["eco give %player% 15000"]
+      3: ["eco give %player% 10000"]
+      4: ["eco give %player% 7500"]
+      5: ["eco give %player% 5000"]
+    job_points:
+      1: ["eco give %player% 25000"]
+      2: ["eco give %player% 15000"]
+      3: ["eco give %player% 10000"]
+      4: ["eco give %player% 7500"]
+      5: ["eco give %player% 5000"]
+
+gui:
+  title-categories: "&8SkyXCore &7» &fLeaderboards"
+  title-category: "&8%category% &7» &fTop"
+  border: "BLACK_STAINED_GLASS_PANE"
+  filler: "GRAY_STAINED_GLASS_PANE"
+  previous: "ARROW"
+  next: "ARROW"
+  close: "BARRIER"
+
+messages:
+  prefix: "&8[&dSkyXCore&8] &r"
+  no-permission: "&cYou do not have permission to do that."
+  player-only: "&cThis command can only be used by a player."
+  player-not-found: "&cPlayer not found."
+  database-error: "&cThe SkyXCore database is unavailable."
+  loading: "&7Loading..."
+  leaderboard-empty: "&7No entries yet."
+  leaderboard-page: "&7Page &f%page%&7/&f%pages%"
+  leaderboard-yours: "&7Your rank: &e#%rank% &7- &f%value%"
+  leaderboard-not-ranked: "&7You are not ranked yet."
+  leaderboard-click: "&eClick to open"
+  gui-close: "&cClose"
+  gui-previous: "&ePrevious page"
+  gui-next: "&eNext page"
+  leaderboard-category: "&7Category: &f%category%"
+  guild-not-found: "&cGuild not found."
+  guild-already-in: "&cYou are already in a guild."
+  guild-none: "&cYou are not in a guild."
+  guild-created: "&aGuild &f%guild% &acreated for &e%cost%&a."
+  guild-create-cost: "&cYou need &e%cost% &cto create a guild."
+  guild-name-taken: "&cThat guild name or tag is already used."
+  guild-invalid-name: "&cInvalid guild name or tag."
+  guild-invited: "&aInvited &f%player% &ato your guild."
+  guild-invite-received: "&eYou were invited to &f%guild%&e. Use &f/guild accept %guild%&e."
+  guild-invite-expired: "&cThat invite has expired."
+  guild-full: "&cThat guild is full."
+  guild-accepted: "&aYou joined &f%guild%&a."
+  guild-joined: "&f%player% &ajoined the guild."
+  guild-left: "&aYou left the guild."
+  guild-member-left: "&f%player% &7left the guild."
+  guild-kicked: "&aKicked &f%player% &afrom the guild."
+  guild-kick-target: "&cYou were kicked from &f%guild%&c."
+  guild-promoted: "&aPromoted &f%player%&a."
+  guild-demoted: "&aDemoted &f%player%&a."
+  guild-disband-warning: "&cThis will permanently disband &f%guild%&c. Run &f/guild disband confirm &cwithin 30 seconds."
+  guild-disbanded: "&cGuild &f%guild% &cdisbanded."
+  guild-role-leader: "&6Leader"
+  guild-role-officer: "&eOfficer"
+  guild-role-member: "&7Member"
+  guild-chat-format: "&8[&d%tag%&8] &f%player%&7: &f%message%"
+  guild-chat-not-in: "&cYou are not in a guild."
+  guild-chat-usage: "&eUsage: /guild chat <message>"
+  guild-home-set: "&aGuild home set."
+  guild-home-none: "&cYour guild has no home."
+  guild-home-warmup: "&eTeleporting to the guild home in &f%seconds%s&e."
+  guild-home-teleported: "&aWelcome to the guild home."
+  guild-home-moved: "&cTeleport cancelled because you moved."
+  guild-bank-disabled: "&cThe guild bank is disabled."
+  guild-bank-balance: "&7Guild bank: &e%balance%"
+  guild-bank-deposited: "&aDeposited &e%amount% &ainto the guild bank."
+  guild-bank-withdrew: "&aWithdrew &e%amount% &afrom the guild bank."
+  guild-bank-no-money: "&cYou do not have enough money."
+  guild-bank-no-funds: "&cThe guild bank does not have enough money."
+  guild-bank-no-permission: "&cOnly the leader and officers can withdraw."
+  guild-info: "&8&m------ &d%guild% &8&m------\n&7Tag: &f%tag%\n&7Leader: &f%leader%\n&7Members: &f%members%&7/&f%max%\n&7Power: &e%power%\n&7Bank: &e%bank%"
+  guild-top-header: "&8&m------ &dTop Guilds &8&m------"
+  guild-top-line: "&e#%rank% &f%guild% &7- &d%power% power"
+  guild-usage: "&eUsage: /guild <create|invite|accept|leave|kick|promote|demote|disband|chat|sethome|home|bank|info|top>"
+  guild-create-usage: "&eUsage: /guild create <name> <tag>"
+  guild-invite-usage: "&eUsage: /guild invite <player>"
+  guild-admin-only: "&cOnly the guild leader or an officer can do that."
+  guild-leader-only: "&cOnly the guild leader can do that."
+  season-started: "&aSeason &f%season% &astarted. Ends: &f%ends%&a."
+  season-reward-claimed: "&aYour season reward has been delivered."
+  season-ended: "&aSeason &f%season% &aended. Top 5 snapshots and rewards processed."
+  season-none: "&cNo active season."
+  season-usage: "&eUsage: /skyxcore season <start|end|status>"
+  season-confirm: "&cRun &f/skyxcore season %action% confirm &cwithin 30 seconds."
+  admin-usage: "&eUsage: /skyxcore <reload|status|season>"
+  reloaded: "&aSkyXCore reloaded."
+  status: "&7Server: &f%server% &8| &7DB: &f%db% &8| &7Stats: &f%stats% &8| &7Guilds: &f%guilds%"

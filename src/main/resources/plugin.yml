@@ -1,0 +1,42 @@
+name: SkyXCore
+version: 0.1.0
+main: net.skyxnetwork.core.SkyXCore
+api-version: '1.21'
+load: POSTWORLD
+author: SkyXNetwork
+description: Competitive core for SkyXNetwork - stats, leaderboards, guilds and seasons.
+website: https://skyxnetwork.net
+softdepend: [PlaceholderAPI, Vault, SkyXPlaytime]
+libraries:
+  - com.mysql:mysql-connector-j:8.4.0
+
+commands:
+  leaderboard:
+    description: Open the SkyXCore leaderboards.
+    usage: /leaderboard [category] [page]
+    aliases: [leadb, lb, tops]
+    permission: skyxcore.use
+  guild:
+    description: Manage your guild.
+    usage: /guild <create|invite|accept|leave|kick|promote|demote|disband|chat|sethome|home|bank|info|top>
+    aliases: [guilds, g]
+    permission: skyxcore.guild
+  skyxcore:
+    description: SkyXCore admin command.
+    usage: /skyxcore <reload|status|season>
+    aliases: [sxc, core]
+    permission: skyxcore.admin
+
+permissions:
+  skyxcore.use:
+    description: Use the leaderboard GUI.
+    default: true
+  skyxcore.guild:
+    description: Use guild commands.
+    default: true
+  skyxcore.admin:
+    description: Use SkyXCore admin commands.
+    default: op
+  skyxcore.admin.season:
+    description: Start or end a leaderboard season.
+    default: op
