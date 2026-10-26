@@ -132,7 +132,6 @@ public final class PlayerHolograms implements Listener {
                 spawn(player);
                 continue;
             }
-            keepNearOwner(player, pd);
             updateVisibility(player, pd);
             updateText(player, pd);
         }
@@ -167,14 +166,10 @@ public final class PlayerHolograms implements Listener {
         if (event.isCancelled()) return;
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             Player player = event.getPlayer();
-            PlayerDisplays pd = displays.get(player.getUniqueId());
-            if (pd == null) return;
-            if (!pd.sameWorld(player)) {
-                spawn(player);
-            } else {
-                keepNearOwner(player, pd);
-                refreshVisibility(pd);
-            }
+            // Rebuild at the destination instead of moving a mounted display.
+            // This avoids a stale entity position and never produces a
+            // server-side teleport animation on a client-mounted display.
+            if (displays.containsKey(player.getUniqueId())) spawn(player);
         }, 1L);
     }
 
@@ -274,22 +269,6 @@ public final class PlayerHolograms implements Listener {
             entity.setBasePlate(false);
             entity.setArms(false);
         });
-    }
-
-    private void keepNearOwner(Player owner, PlayerDisplays pd) {
-        if (!pd.sameWorld(owner)) return;
-        Location location = owner.getLocation();
-        // Keep the server-side entity at the player, not only within the
-        // entity-tracking radius. This avoids the client briefly showing a
-        // newly spawned display at the player's old spawn point before its
-        // client-side mount packet is applied.
-        if (pd.javaDisplay.getLocation().distanceSquared(location) > 64.0 * 64.0) {
-            pd.javaDisplay.teleport(location);
-        }
-        if (pd.bedrockAnchor.getLocation().distanceSquared(location) > 64.0 * 64.0) {
-            pd.bedrockAnchor.teleport(location);
-            pd.bedrockDisplay.teleport(location);
-        }
     }
 
     private void updateVisibility(Player owner, PlayerDisplays pd) {
