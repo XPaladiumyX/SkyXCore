@@ -7,6 +7,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
+import org.bukkit.event.player.PlayerTeleportEvent;
 
 import java.util.ArrayList;
 
@@ -24,7 +25,21 @@ public final class RtpPassengerDetachListener implements Listener {
     public void onRtpCommand(PlayerCommandPreprocessEvent event) {
         String message = event.getMessage().trim().toLowerCase();
         if (!message.equals("/rtp") && !message.startsWith("/rtp ")) return;
-        Player player = event.getPlayer();
+        detach(event.getPlayer());
+    }
+
+    /**
+     * BetterRTP's teleport is asynchronous: the nametag reattaches during the
+     * chunk load, so the command-time detach is not enough. Detach again at
+     * the actual PlayerTeleportEvent, immediately before the server moves the
+     * player.
+     */
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onTeleport(PlayerTeleportEvent event) {
+        detach(event.getPlayer());
+    }
+
+    private void detach(Player player) {
         for (Entity passenger : new ArrayList<>(player.getPassengers())) {
             if (passenger instanceof TextDisplay) player.removePassenger(passenger);
         }
