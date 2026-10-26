@@ -37,7 +37,7 @@ import java.util.function.Supplier;
  */
 public final class GuildGui implements Listener {
 
-    private enum Section { NO_GUILD, MAIN, MEMBERS, MEMBER_ACTIONS, INVITES, BANK, HOME, SETTINGS }
+    private enum Section { NO_GUILD, MAIN, MEMBERS, MEMBER_ACTIONS, INVITES, BANK, HOME, SETTINGS, POWER }
     private enum InputType { CREATE, TAG, DESCRIPTION }
 
     private record PendingInput(InputType type, long expires) {
@@ -124,6 +124,9 @@ public final class GuildGui implements Listener {
                         "&7Leader only."), false));
         inventory.setItem(25, item(Material.NETHER_STAR, "&d&lTop Guilds",
                 List.of("&7Open the guild leaderboard."), true));
+        inventory.setItem(39, item(Material.BOOK, "&e&l? How to increase Power",
+                List.of("&7Click to see how guild power works",
+                        "&7and what your members should do."), true));
 
         if (snapshot.actor() != null && snapshot.actor().role() == Guild.Role.LEADER) {
             inventory.setItem(40, item(Material.BARRIER, "&c&lDisband Guild",
@@ -134,6 +137,46 @@ public final class GuildGui implements Listener {
                     List.of("&7Leave your current guild."), false));
         }
         inventory.setItem(49, item(Material.BARRIER, "&cClose", List.of(), false));
+        player.openInventory(inventory);
+    }
+
+    private void openPowerHelp(Player player, Snapshot snapshot) {
+        Holder holder = new Holder(Section.POWER, player.getUniqueId(), snapshot.guild(),
+                snapshot.actor(), snapshot.members(), null);
+        Inventory inventory = Bukkit.createInventory(holder, 54,
+                color("&8Guild Power &7» &eGuide"));
+        holder.inventory = inventory;
+        fill(inventory);
+        CoreSettings.GuildPowerWeights weights = settings.guildPower;
+        inventory.setItem(4, item(Material.EXPERIENCE_BOTTLE, "&e&lHow Guild Power Works",
+                List.of("&7Power is recalculated every 5 minutes.",
+                        "&7It is the sum of all member activity.",
+                        "&7Higher power = higher guild rank."), true));
+        inventory.setItem(20, item(Material.IRON_SWORD, "&cPvP Kills",
+                List.of("&7Each PvP kill: &e+" + settings.number(weights.pvp()) + " power",
+                        "&7Fight other players with your guild."), false));
+        inventory.setItem(21, item(Material.DRAGON_HEAD, "&5Boss Damage",
+                List.of("&7Each damage point: &e+" + settings.number(weights.boss()) + " power",
+                        "&7Fight Ender Dragon, Wither and Warden."), false));
+        inventory.setItem(22, item(Material.ROTTEN_FLESH, "&2Mob Kills",
+                List.of("&7Each mob kill: &e+" + settings.number(weights.mob()) + " power"), false));
+        inventory.setItem(23, item(Material.WHEAT, "&aCrops Broken",
+                List.of("&7Each crop: &e+" + settings.number(weights.crop()) + " power"), false));
+        inventory.setItem(24, item(Material.STONE, "&7Blocks Broken",
+                List.of("&7Each block: &e+" + settings.number(weights.block()) + " power"), false));
+        inventory.setItem(29, item(Material.CLOCK, "&9Playtime",
+                List.of("&7Each hour: &e+" + settings.number(weights.playtime()) + " power"), false));
+        inventory.setItem(30, item(Material.GOLD_INGOT, "&6Guild Bank",
+                List.of("&7Each 1,000₪: &e+" + settings.number(weights.bank() * 1000) + " power",
+                        "&7Deposit in /guild bank."), false));
+        inventory.setItem(31, item(Material.PLAYER_HEAD, "&eMembers",
+                List.of("&7Each member: &e+" + settings.number(weights.member()) + " power",
+                        "&7Recruit active players."), false));
+        inventory.setItem(40, item(Material.LIME_DYE, "&aFastest way",
+                List.of("&7Play with your guild: PvP, bosses,",
+                        "&7mobs, farming, mining and playtime.",
+                        "&7Deposit money in the guild bank."), true));
+        backAndClose(inventory);
         player.openInventory(inventory);
     }
 
@@ -441,6 +484,9 @@ public final class GuildGui implements Listener {
             case BANK -> handleBankClick(player, holder, slot);
             case HOME -> handleHomeClick(player, holder, slot);
             case SETTINGS -> handleSettingsClick(player, holder, slot);
+            case POWER -> {
+                if (slot == 45) openMainFromHolder(player, holder);
+            }
         }
     }
 
@@ -482,6 +528,11 @@ public final class GuildGui implements Listener {
                     player.closeInventory();
                     plugin.getLeaderboardGui().openCategory(player, category, 0);
                 }
+            }
+            case 39 -> {
+                async(() -> snapshot(player), snapshot -> {
+                    if (snapshot != null) openPowerHelp(player, snapshot);
+                });
             }
             case 40 -> {
                 if (holder.actor != null && holder.actor.role() == Guild.Role.LEADER) {

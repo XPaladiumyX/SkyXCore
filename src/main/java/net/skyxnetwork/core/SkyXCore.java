@@ -7,6 +7,7 @@ import net.skyxnetwork.core.core.PlayerRegistry;
 import net.skyxnetwork.core.guild.EconomyHook;
 import net.skyxnetwork.core.guild.GuildCommand;
 import net.skyxnetwork.core.guild.GuildGui;
+import net.skyxnetwork.core.hologram.PlayerHolograms;
 import net.skyxnetwork.core.guild.GuildService;
 import net.skyxnetwork.core.leaderboard.LeaderboardCommand;
 import net.skyxnetwork.core.leaderboard.LeaderboardGui;
@@ -36,6 +37,7 @@ public final class SkyXCore extends JavaPlugin {
     private LeaderboardGui leaderboardGui;
     private GuildService guildService;
     private GuildGui guildGui;
+    private PlayerHolograms playerHolograms;
     private EconomyHook economy;
     private BukkitTask powerTask;
     private SkyXCoreExpansion placeholderExpansion;
@@ -73,6 +75,8 @@ public final class SkyXCore extends JavaPlugin {
         guildService.start();
         guildGui = new GuildGui(this, guildService, settings);
         getServer().getPluginManager().registerEvents(guildGui, this);
+        playerHolograms = new PlayerHolograms(this, settings);
+        playerHolograms.start();
         economy = new EconomyHook();
 
         registerCommands();
@@ -87,6 +91,7 @@ public final class SkyXCore extends JavaPlugin {
     @Override
     public void onDisable() {
         if (powerTask != null) powerTask.cancel();
+        if (playerHolograms != null) playerHolograms.stop();
         if (statsService != null) statsService.stop();
         if (placeholderExpansion != null) {
             try {
@@ -141,6 +146,7 @@ public final class SkyXCore extends JavaPlugin {
         leaderboardGui.updateSettings(fresh);
         guildService.updateSettings(fresh);
         seasonService.updateSettings(fresh);
+        playerHolograms.updateSettings(fresh);
         getLogger().info("SkyXCore configuration reloaded.");
     }
 

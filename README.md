@@ -10,6 +10,7 @@ SkyXCore is designed for **Paper 1.21+**, including the current **1.21.8** and *
 - `/leaderboard` / `/leadb` opens a category menu.
 - Categories are configurable and currently include Money, Playtime, Guilds, PvP Kills, Crops Broken, Mob Kills, Blocks Broken, Boss Damage and Job Points.
 - Categories are centered on a 3x3 menu; top pages use two centered rows of five heads, a back button and unlimited page navigation.
+- `/leadb` has a 2-second command cooldown and a 300 ms GUI click throttle to prevent query flooding.
 - The viewer's own rank is shown in the header and as a grey head when it is outside the current page.
 - Money, Playtime and Job Points are read directly from their existing MySQL databases.
 - PvP kills, mob kills, crops, blocks and boss damage are tracked by SkyXCore from Bukkit events.
@@ -27,6 +28,8 @@ SkyXCore is designed for **Paper 1.21+**, including the current **1.21.8** and *
 - Top guilds category in the leaderboard GUI.
 - Player-friendly guild GUI (`/guild`) with members, invites, bank, home, settings, tag colors, top and leave/disband actions.
 - Guild tag prefixes in chat and TAB; legacy color codes are supported in tags.
+- A `?` guide in the guild GUI explains every power source and how to increase power.
+- A real per-player ArmorStand line above the in-game nametag shows Money, PvP kills and bounty.
 - Guilds are shared across Survival and Farmlands through MySQL.
 
 ### Seasons
@@ -56,11 +59,12 @@ SkyXCore is designed for **Paper 1.21+**, including the current **1.21.8** and *
 ## Display integration
 
 - `/leadb` has a configurable command cooldown (2 seconds by default; admins bypass it).
-- The TAB header contains a compact line with guild tag, Money, PvP kills and bounty.
-- The Survival sidebar shows rank, guild, Money, playtime, Job points, next playtime reward, PvP kills, boss damage, bounty and online count.
+- The Survival sidebar is a compact 10-line layout using a new animated wave divider.
+- The in-game per-player line is the only above-nametag stats display; TAB handles guild tags in the list/nametag.
 - LPC reads `%skyxcore_guild_tag%`/`%skyxcore_guild_tag_mini%` for chat.
 - TAB reads `%skyxcore_guild_tag%` for the tablist prefix and nametag prefix.
 - Available SkyXCore PAPI placeholders: `%skyxcore_guild_tag%`, `_plain`, `_mini`, `_name`, `_power`, `%skyxcore_pvp_kills%`, `%skyxcore_mob_kills%`, `%skyxcore_crops_broken%`, `%skyxcore_blocks_broken%`, `%skyxcore_boss_damage%` and `%skyxcore_season%`.
+- The above-head line is configured under `holograms:` and can be disabled per world.
 
 ## Configuration
 

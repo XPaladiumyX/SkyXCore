@@ -38,6 +38,8 @@ public final class LeaderboardGui implements Listener {
     private final LeaderboardService service;
     private final PlayerRegistry players;
     private volatile CoreSettings settings;
+    private final java.util.Map<UUID, Long> clickCooldowns = new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.Set<UUID> loading = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     public LeaderboardGui(SkyXCore plugin, LeaderboardService service,
                           PlayerRegistry players, CoreSettings settings) {
@@ -75,8 +77,10 @@ public final class LeaderboardGui implements Listener {
     }
 
     public void openCategory(Player player, CoreSettings.Category category, int page) {
+        if (!loading.add(player.getUniqueId())) return;
         player.sendMessage(plugin.prefixed("loading"));
         service.fetch(category, page, player.getUniqueId(), data -> {
+            loading.remove(player.getUniqueId());
             if (!player.isOnline()) return;
             openCategoryPage(player, category, data);
         });
@@ -184,6 +188,14 @@ public final class LeaderboardGui implements Listener {
         if (!(event.getWhoClicked() instanceof Player player)) return;
         int slot = event.getRawSlot();
         if (slot < 0 || slot >= 54) return;
+
+        long now = System.currentTimeMillis();
+        Long last = clickCooldowns.get(player.getUniqueId());
+        if (settings.leaderboardGuiClickDelayMs > 0
+                && last != null && now - last < settings.leaderboardGuiClickDelayMs) {
+            return;
+        }
+        clickCooldowns.put(player.getUniqueId(), now);
 
         if (holder.type == Holder.Type.CATEGORIES) {
             if (slot == CLOSE_SLOT) {

@@ -82,6 +82,7 @@ leaderboards:
   enabled: true
   page-size: 10
   command-cooldown-seconds: 2
+  gui-click-delay-ms: 300
   cache-seconds: 0
   categories:
     money:
@@ -168,6 +169,16 @@ guilds:
     block-weight: 0.01
     playtime-weight: 2
     bank-weight: 0.001
+
+holograms:
+  # A small invisible ArmorStand line above every player. This is the in-game
+  # line above the nametag; TAB cannot render a per-player line natively.
+  enabled: true
+  height: 2.55
+  update-interval-ticks: 20
+  move-interval-ticks: 5
+  format: "&6%lighteconomy_money%₪ &8| &c%skyxcore_pvp_kills% PvP &8| &eBounty %notbounties_bounty_formatted%"
+  ignored-worlds: []
 
 season:
   enabled: true

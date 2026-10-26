@@ -27,7 +27,7 @@ public final class LeaderboardCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         int cooldown = plugin.getSettings().leaderboardCommandCooldownSeconds;
-        if (cooldown > 0 && !player.hasPermission("skyxcore.admin")) {
+        if (cooldown > 0) {
             long now = System.currentTimeMillis();
             Long until = cooldowns.get(player.getUniqueId());
             if (until != null && until > now) {

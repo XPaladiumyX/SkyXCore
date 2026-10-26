@@ -57,6 +57,14 @@ public final class CoreSettings {
     public final boolean leaderboardsEnabled;
     public final int pageSize;
     public final int leaderboardCommandCooldownSeconds;
+    public final int leaderboardGuiClickDelayMs;
+
+    public final boolean playerHologramsEnabled;
+    public final double playerHologramHeight;
+    public final int playerHologramUpdateTicks;
+    public final int playerHologramMoveTicks;
+    public final String playerHologramFormat;
+    public final Set<String> playerHologramIgnoredWorlds;
     public final List<Category> categories;
     public final Map<String, Category> categoryById;
 
@@ -114,6 +122,15 @@ public final class CoreSettings {
         leaderboardsEnabled = config.getBoolean("leaderboards.enabled", true);
         pageSize = clamp(config.getInt("leaderboards.page-size", 10), 1, 10);
         leaderboardCommandCooldownSeconds = clamp(config.getInt("leaderboards.command-cooldown-seconds", 2), 0, 60);
+        leaderboardGuiClickDelayMs = clamp(config.getInt("leaderboards.gui-click-delay-ms", 300), 0, 5000);
+
+        playerHologramsEnabled = config.getBoolean("holograms.enabled", true);
+        playerHologramHeight = Math.max(1.0, Math.min(5.0, config.getDouble("holograms.height", 2.55)));
+        playerHologramUpdateTicks = clamp(config.getInt("holograms.update-interval-ticks", 20), 5, 200);
+        playerHologramMoveTicks = clamp(config.getInt("holograms.move-interval-ticks", 5), 1, 40);
+        playerHologramFormat = config.getString("holograms.format",
+                "&6%lighteconomy_money%₪ &8| &c%skyxcore_pvp_kills% PvP &8| &eBounty %notbounties_bounty_formatted%");
+        playerHologramIgnoredWorlds = Set.copyOf(config.getStringList("holograms.ignored-worlds"));
         List<Category> parsedCategories = new ArrayList<>();
         ConfigurationSection categoriesSection = config.getConfigurationSection("leaderboards.categories");
         if (categoriesSection != null) {
