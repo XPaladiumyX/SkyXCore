@@ -13,9 +13,11 @@ import org.bukkit.entity.Display;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.TextDisplay;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
+import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
@@ -25,6 +27,7 @@ import org.bukkit.util.Transformation;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -120,10 +123,41 @@ public final class PlayerHolograms implements Listener {
         remove(event.getPlayer());
     }
 
-    @EventHandler
+    /**
+     * Passenger displays prevent some teleport implementations from moving the
+     * player. Remove them before the teleport, then put them back at the new
+     * location. This also covers /rtp, which teleports players while the line
+     * is mounted.
+     */
+    @EventHandler(priority = EventPriority.LOWEST)
     public void onTeleport(PlayerTeleportEvent event) {
-        if (event.getFrom().getWorld() == event.getTo().getWorld()) return;
-        Bukkit.getScheduler().runTaskLater(plugin, () -> spawn(event.getPlayer()), 1L);
+        Player player = event.getPlayer();
+        PlayerDisplays pd = displays.remove(player.getUniqueId());
+        if (pd != null) pd.remove();
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (player.isOnline() && !displays.containsKey(player.getUniqueId()) && !ignored(player)) {
+                spawn(player);
+            }
+        }, 2L);
+    }
+
+    /**
+     * Some RTP implementations decide whether a teleport is possible before
+     * firing PlayerTeleportEvent. Remove the passenger displays as soon as an
+     * /rtp command is issued, and restore them later if no teleport happened.
+     */
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onRtpCommand(PlayerCommandPreprocessEvent event) {
+        String message = event.getMessage().toLowerCase(Locale.ROOT);
+        if (!message.equals("/rtp") && !message.startsWith("/rtp ")) return;
+        Player player = event.getPlayer();
+        PlayerDisplays pd = displays.remove(player.getUniqueId());
+        if (pd != null) pd.remove();
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (player.isOnline() && !displays.containsKey(player.getUniqueId()) && !ignored(player)) {
+                spawn(player);
+            }
+        }, 40L);
     }
 
     @EventHandler
