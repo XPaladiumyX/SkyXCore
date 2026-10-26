@@ -290,10 +290,14 @@ public final class PlayerHolograms implements Listener {
     private void keepNearOwner(Player owner, PlayerDisplays pd) {
         if (!pd.sameWorld(owner)) return;
         Location location = owner.getLocation();
-        if (pd.javaDisplay.getLocation().distanceSquared(location) > 24.0 * 24.0) {
+        // Keep the server-side entity at the player, not only within the
+        // entity-tracking radius. This avoids the client briefly showing a
+        // newly spawned display at the player's old spawn point before its
+        // client-side mount packet is applied.
+        if (pd.javaDisplay.getLocation().distanceSquared(location) > 1.0E-4D) {
             pd.javaDisplay.teleport(location);
         }
-        if (pd.bedrockAnchor.getLocation().distanceSquared(location) > 24.0 * 24.0) {
+        if (pd.bedrockAnchor.getLocation().distanceSquared(location) > 1.0E-4D) {
             pd.bedrockAnchor.teleport(location);
             pd.bedrockDisplay.teleport(location);
         }
@@ -349,6 +353,16 @@ public final class PlayerHolograms implements Listener {
         if (pd.hidden || viewer.getUniqueId().equals(pd.ownerId)) return;
         Player owner = Bukkit.getPlayer(pd.ownerId);
         if (owner == null || viewer.getWorld() != owner.getWorld()) return;
+        // Move the server entity to the player before sending its spawn/mount
+        // packets, so viewers never see it at a stale location first.
+        try {
+            Location location = owner.getLocation();
+            if (pd.javaDisplay != null && pd.javaDisplay.isValid()) pd.javaDisplay.teleport(location);
+            if (pd.bedrockAnchor != null && pd.bedrockAnchor.isValid()) pd.bedrockAnchor.teleport(location);
+            if (pd.bedrockDisplay != null && pd.bedrockDisplay.isValid()) pd.bedrockDisplay.teleport(location);
+        } catch (Throwable ignored) {
+            // A display in an unloading world will respawn on the next tick.
+        }
         if (isBedrock(viewer)) {
             if (pd.bedrockAnchor != null && pd.bedrockAnchor.isValid()) {
                 viewer.showEntity(plugin, pd.bedrockAnchor);
