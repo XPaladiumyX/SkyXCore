@@ -357,11 +357,11 @@ public final class PlayerHolograms implements Listener {
         if (pd.hidden || viewer.getUniqueId().equals(pd.ownerId)) return;
         Player owner = Bukkit.getPlayer(pd.ownerId);
         if (owner == null || viewer.getWorld() != owner.getWorld()) return;
-        // Move the server entity to the player before sending its spawn/mount
-        // packets, so viewers never see it at a stale location first.
+        // The Java display is a real passenger; teleporting a server-side
+        // passenger dismounts it, which left it stuck at the spawn point.
+        // Only the Bedrock entities need the fallback position sync.
         try {
             Location location = owner.getLocation();
-            if (pd.javaDisplay != null && pd.javaDisplay.isValid()) pd.javaDisplay.teleport(location);
             if (pd.bedrockAnchor != null && pd.bedrockAnchor.isValid()) pd.bedrockAnchor.teleport(location);
             if (pd.bedrockDisplay != null && pd.bedrockDisplay.isValid()) pd.bedrockDisplay.teleport(location);
         } catch (Throwable ignored) {
