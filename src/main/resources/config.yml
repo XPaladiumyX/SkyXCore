@@ -57,7 +57,7 @@ stats:
     # A player cannot farm the same victim repeatedly within this window.
     pvp-min-kill-interval-seconds: 300
     # Do not count kills where both players share the same IP.
-    pvp-block-same-ip: true
+    pvp-block-same-ip: false
     # Do not count mobs spawned by spawners.
     ignore-spawner-mobs: true
   crops:

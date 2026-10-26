@@ -1,5 +1,8 @@
 package net.skyxnetwork.core.hologram;
 
+import com.comphenix.protocol.PacketType;
+import com.comphenix.protocol.ProtocolLibrary;
+import com.comphenix.protocol.events.PacketContainer;
 import me.clip.placeholderapi.PlaceholderAPI;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
@@ -10,41 +13,44 @@ import org.bukkit.Color;
 import org.bukkit.Location;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Display;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.TextDisplay;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
-import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
+import org.bukkit.event.player.PlayerToggleSneakEvent;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Transformation;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
-import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Per-player stat line above the vanilla nametag.
+ * Packet-mounted player holograms.
  *
- * Passenger entities are the only way to follow a moving player with no
- * server-side position task and no interpolation delay. The Java display is
- * mounted directly on the player. The Bedrock display is mounted on an
- * invisible marker armor stand: Geyser handles a nested passenger much more
- * consistently, and the marker has no head rotation, so looking up/down does
- * not move the line.
+ * The display entities are normal world entities on the server, but the
+ * passenger relationship is sent only to selected viewers with a MOUNT packet.
+ * This gives the client the exact follow behaviour of a passenger (no movement
+ * task and no interpolation delay) without putting a server-side passenger on
+ * the player. Server teleports, /spawn, /hub, /rtp and other plugins are
+ * therefore completely unaffected.
  *
- * The marker is only shown to Bedrock viewers, together with the Bedrock text
- * display. The Java display is only shown to Java viewers. The owner never sees
- * either display.
+ * Java viewers receive a display mounted directly on the player. Bedrock
+ * viewers receive a display mounted on an invisible marker armor stand, which
+ * avoids Geyser's player-head rotation offset. The owner never receives either
+ * mount packet. Sneaking and death hide the line for everyone.
  */
 public final class PlayerHolograms implements Listener {
 
@@ -52,11 +58,16 @@ public final class PlayerHolograms implements Listener {
     private volatile CoreSettings settings;
     private final Map<UUID, PlayerDisplays> displays = new ConcurrentHashMap<>();
     private final Map<UUID, Boolean> bedrockCache = new ConcurrentHashMap<>();
+    private final boolean protocolLib;
     private BukkitTask textTask;
 
     public PlayerHolograms(SkyXCore plugin, CoreSettings settings) {
         this.plugin = plugin;
         this.settings = settings;
+        this.protocolLib = Bukkit.getPluginManager().isPluginEnabled("ProtocolLib");
+        if (!protocolLib) {
+            plugin.getLogger().warning("ProtocolLib is not installed; player stat holograms are disabled.");
+        }
     }
 
     public void start() {
@@ -83,7 +94,7 @@ public final class PlayerHolograms implements Listener {
 
     private void restartTask() {
         if (textTask != null) textTask.cancel();
-        if (!settings.playerHologramsEnabled) return;
+        if (!settings.playerHologramsEnabled || !protocolLib) return;
         long ticks = Math.max(5L, settings.playerHologramUpdateTicks);
         textTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tick, ticks, ticks);
     }
@@ -99,9 +110,19 @@ public final class PlayerHolograms implements Listener {
                 spawn(player);
                 continue;
             }
-            pd.ensurePassengers(player);
+            keepNearOwner(player, pd);
             updateText(player, pd);
         }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onMove(PlayerMoveEvent event) {
+        Location from = event.getFrom();
+        Location to = event.getTo();
+        if (to == null) return;
+        if (from.getX() == to.getX() && from.getY() == to.getY() && from.getZ() == to.getZ()) return;
+        PlayerDisplays pd = displays.get(event.getPlayer().getUniqueId());
+        if (pd != null) keepNearOwner(event.getPlayer(), pd);
     }
 
     @EventHandler
@@ -110,9 +131,7 @@ public final class PlayerHolograms implements Listener {
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             spawn(player);
             for (Map.Entry<UUID, PlayerDisplays> entry : displays.entrySet()) {
-                if (!entry.getKey().equals(player.getUniqueId())) {
-                    show(player, entry.getValue());
-                }
+                if (!entry.getKey().equals(player.getUniqueId())) show(player, entry.getValue());
             }
         }, 20L);
     }
@@ -123,41 +142,20 @@ public final class PlayerHolograms implements Listener {
         remove(event.getPlayer());
     }
 
-    /**
-     * Passenger displays prevent some teleport implementations from moving the
-     * player. Remove them before the teleport, then put them back at the new
-     * location. This also covers /rtp, which teleports players while the line
-     * is mounted.
-     */
-    @EventHandler(priority = EventPriority.LOWEST)
+    @EventHandler
     public void onTeleport(PlayerTeleportEvent event) {
-        Player player = event.getPlayer();
-        PlayerDisplays pd = displays.remove(player.getUniqueId());
-        if (pd != null) pd.remove();
+        if (event.isCancelled()) return;
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            if (player.isOnline() && !displays.containsKey(player.getUniqueId()) && !ignored(player)) {
+            Player player = event.getPlayer();
+            PlayerDisplays pd = displays.get(player.getUniqueId());
+            if (pd == null) return;
+            if (!pd.sameWorld(player)) {
                 spawn(player);
+            } else {
+                keepNearOwner(player, pd);
+                refreshVisibility(pd);
             }
-        }, 2L);
-    }
-
-    /**
-     * Some RTP implementations decide whether a teleport is possible before
-     * firing PlayerTeleportEvent. Remove the passenger displays as soon as an
-     * /rtp command is issued, and restore them later if no teleport happened.
-     */
-    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
-    public void onRtpCommand(PlayerCommandPreprocessEvent event) {
-        String message = event.getMessage().toLowerCase(Locale.ROOT);
-        if (!message.equals("/rtp") && !message.startsWith("/rtp ")) return;
-        Player player = event.getPlayer();
-        PlayerDisplays pd = displays.remove(player.getUniqueId());
-        if (pd != null) pd.remove();
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            if (player.isOnline() && !displays.containsKey(player.getUniqueId()) && !ignored(player)) {
-                spawn(player);
-            }
-        }, 40L);
+        }, 1L);
     }
 
     @EventHandler
@@ -181,18 +179,34 @@ public final class PlayerHolograms implements Listener {
         }, 2L);
     }
 
+    @EventHandler
+    public void onDeath(PlayerDeathEvent event) {
+        PlayerDisplays pd = displays.get(event.getEntity().getUniqueId());
+        if (pd != null) {
+            pd.hidden = true;
+            hideLine(pd);
+        }
+    }
+
+    @EventHandler
+    public void onSneak(PlayerToggleSneakEvent event) {
+        PlayerDisplays pd = displays.get(event.getPlayer().getUniqueId());
+        if (pd == null) return;
+        pd.hidden = event.isSneaking();
+        if (pd.hidden) {
+            hideLine(pd);
+        } else if (!event.getPlayer().isDead()) {
+            showLine(event.getPlayer(), pd);
+        }
+    }
+
     private void spawn(Player owner) {
-        if (!settings.playerHologramsEnabled || ignored(owner)) return;
+        if (!settings.playerHologramsEnabled || !protocolLib || ignored(owner)) return;
         remove(owner);
 
         TextDisplay javaDisplay = create(owner, settings.playerHologramHeight);
-        owner.addPassenger(javaDisplay);
-
         ArmorStand bedrockAnchor = createAnchor(owner);
-        owner.addPassenger(bedrockAnchor);
         TextDisplay bedrockDisplay = create(owner, settings.playerHologramBedrockHeight);
-        bedrockAnchor.addPassenger(bedrockDisplay);
-
         PlayerDisplays pd = new PlayerDisplays(owner.getUniqueId(), javaDisplay, bedrockAnchor, bedrockDisplay);
         displays.put(owner.getUniqueId(), pd);
         updateText(owner, pd);
@@ -201,7 +215,9 @@ public final class PlayerHolograms implements Listener {
         owner.hideEntity(plugin, bedrockAnchor);
         owner.hideEntity(plugin, bedrockDisplay);
         for (Player viewer : Bukkit.getOnlinePlayers()) {
-            if (!viewer.getUniqueId().equals(owner.getUniqueId())) show(viewer, pd);
+            if (!viewer.getUniqueId().equals(owner.getUniqueId())) {
+                show(viewer, pd);
+            }
         }
     }
 
@@ -243,6 +259,18 @@ public final class PlayerHolograms implements Listener {
         });
     }
 
+    private void keepNearOwner(Player owner, PlayerDisplays pd) {
+        if (!pd.sameWorld(owner)) return;
+        Location location = owner.getLocation();
+        if (pd.javaDisplay.getLocation().distanceSquared(location) > 24.0 * 24.0) {
+            pd.javaDisplay.teleport(location);
+        }
+        if (pd.bedrockAnchor.getLocation().distanceSquared(location) > 24.0 * 24.0) {
+            pd.bedrockAnchor.teleport(location);
+            pd.bedrockDisplay.teleport(location);
+        }
+    }
+
     private void updateText(Player player, PlayerDisplays pd) {
         Component rendered = LegacyComponentSerializer.legacySection().deserialize(text(player));
         if (rendered.equals(pd.text)) return;
@@ -251,20 +279,61 @@ public final class PlayerHolograms implements Listener {
         if (pd.bedrockDisplay != null && pd.bedrockDisplay.isValid()) pd.bedrockDisplay.text(rendered);
     }
 
+    private void hideLine(PlayerDisplays pd) {
+        for (Player viewer : Bukkit.getOnlinePlayers()) {
+            if (viewer.getUniqueId().equals(pd.ownerId)) continue;
+            hide(viewer, pd);
+        }
+    }
+
+    private void showLine(Player owner, PlayerDisplays pd) {
+        if (pd.hidden) return;
+        for (Player viewer : Bukkit.getOnlinePlayers()) {
+            if (!viewer.getUniqueId().equals(pd.ownerId)) show(viewer, pd);
+        }
+    }
+
+    private void refreshVisibility(PlayerDisplays pd) {
+        if (pd.hidden) return;
+        for (Player viewer : Bukkit.getOnlinePlayers()) {
+            if (!viewer.getUniqueId().equals(pd.ownerId)) show(viewer, pd);
+        }
+    }
+
     private void show(Player viewer, PlayerDisplays pd) {
-        if (viewer.getUniqueId().equals(pd.ownerId)) return;
+        if (pd.hidden || viewer.getUniqueId().equals(pd.ownerId)) return;
+        Player owner = Bukkit.getPlayer(pd.ownerId);
+        if (owner == null || viewer.getWorld() != owner.getWorld()) return;
         if (isBedrock(viewer)) {
-            if (pd.bedrockAnchor != null && pd.bedrockAnchor.isValid()
-                    && pd.bedrockAnchor.getWorld() == viewer.getWorld()) {
+            if (pd.bedrockAnchor != null && pd.bedrockAnchor.isValid()) {
                 viewer.showEntity(plugin, pd.bedrockAnchor);
             }
-            if (pd.bedrockDisplay != null && pd.bedrockDisplay.isValid()
-                    && pd.bedrockDisplay.getWorld() == viewer.getWorld()) {
+            if (pd.bedrockDisplay != null && pd.bedrockDisplay.isValid()) {
                 viewer.showEntity(plugin, pd.bedrockDisplay);
             }
-        } else if (pd.javaDisplay != null && pd.javaDisplay.isValid()
-                && pd.javaDisplay.getWorld() == viewer.getWorld()) {
+            mount(viewer, owner, pd.bedrockAnchor);
+            mount(viewer, pd.bedrockAnchor, pd.bedrockDisplay);
+        } else if (pd.javaDisplay != null && pd.javaDisplay.isValid()) {
             viewer.showEntity(plugin, pd.javaDisplay);
+            mount(viewer, owner, pd.javaDisplay);
+        }
+    }
+
+    private void hide(Player viewer, PlayerDisplays pd) {
+        if (pd.javaDisplay != null && pd.javaDisplay.isValid()) viewer.hideEntity(plugin, pd.javaDisplay);
+        if (pd.bedrockAnchor != null && pd.bedrockAnchor.isValid()) viewer.hideEntity(plugin, pd.bedrockAnchor);
+        if (pd.bedrockDisplay != null && pd.bedrockDisplay.isValid()) viewer.hideEntity(plugin, pd.bedrockDisplay);
+    }
+
+    private void mount(Player viewer, Entity vehicle, Entity passenger) {
+        if (!protocolLib || vehicle == null || passenger == null || !passenger.isValid()) return;
+        try {
+            PacketContainer packet = new PacketContainer(PacketType.Play.Server.MOUNT);
+            packet.getIntegers().write(0, vehicle.getEntityId());
+            packet.getIntegerArrays().write(0, new int[]{passenger.getEntityId()});
+            ProtocolLibrary.getProtocolManager().sendServerPacket(viewer, packet);
+        } catch (Throwable exception) {
+            plugin.getLogger().warning("Could not send hologram mount packet: " + exception.getMessage());
         }
     }
 
@@ -291,6 +360,7 @@ public final class PlayerHolograms implements Listener {
 
     private boolean ignored(Player player) {
         return !settings.playerHologramsEnabled
+                || !protocolLib
                 || settings.playerHologramIgnoredWorlds.contains(player.getWorld().getName());
     }
 
@@ -313,6 +383,7 @@ public final class PlayerHolograms implements Listener {
         private final ArmorStand bedrockAnchor;
         private final TextDisplay bedrockDisplay;
         private Component text;
+        private volatile boolean hidden;
 
         private PlayerDisplays(UUID ownerId, TextDisplay javaDisplay, ArmorStand bedrockAnchor,
                                TextDisplay bedrockDisplay) {
@@ -325,15 +396,14 @@ public final class PlayerHolograms implements Listener {
         private boolean valid(Player owner) {
             return javaDisplay != null && bedrockAnchor != null && bedrockDisplay != null
                     && javaDisplay.isValid() && bedrockAnchor.isValid() && bedrockDisplay.isValid()
+                    && sameWorld(owner);
+        }
+
+        private boolean sameWorld(Player owner) {
+            return javaDisplay != null && bedrockAnchor != null && bedrockDisplay != null
                     && javaDisplay.getWorld() == owner.getWorld()
                     && bedrockAnchor.getWorld() == owner.getWorld()
                     && bedrockDisplay.getWorld() == owner.getWorld();
-        }
-
-        private void ensurePassengers(Player owner) {
-            if (!owner.getPassengers().contains(javaDisplay)) owner.addPassenger(javaDisplay);
-            if (!owner.getPassengers().contains(bedrockAnchor)) owner.addPassenger(bedrockAnchor);
-            if (!bedrockAnchor.getPassengers().contains(bedrockDisplay)) bedrockAnchor.addPassenger(bedrockDisplay);
         }
 
         private void remove() {

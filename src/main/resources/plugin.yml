@@ -6,7 +6,7 @@ load: POSTWORLD
 author: SkyXNetwork
 description: Competitive core for SkyXNetwork - stats, leaderboards, guilds and seasons.
 website: https://skyxnetwork.net
-softdepend: [PlaceholderAPI, Vault, SkyXPlaytime]
+softdepend: [PlaceholderAPI, Vault, SkyXPlaytime, ProtocolLib]
 libraries:
   - com.mysql:mysql-connector-j:8.4.0
 
