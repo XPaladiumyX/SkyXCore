@@ -176,7 +176,29 @@ public final class PlayerHolograms implements Listener {
             if (player == null || !player.isOnline()) continue;
             if (settings.playerHologramsEnabled && !ignored(player)) spawn(player);
             if (settings.playerHologramRefreshEligible) eligibleNametagRefresher.refresh(player);
+            scheduleSneakPulse(player);
         }
+    }
+
+    /**
+     * Bedrock can keep the passenger nametag at a stale height until the
+     * target player's pose metadata changes. A short pose pulse reproduces the
+     * manual sneak/unsneak reset without permanently changing the player.
+     */
+    private void scheduleSneakPulse(Player player) {
+        if (player.isDead() || player.getHealth() <= 0.0 || player.isInsideVehicle() || player.isSneaking()) {
+            return;
+        }
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (!player.isOnline() || player.isDead() || player.getHealth() <= 0.0
+                    || player.isInsideVehicle() || player.isSneaking()) {
+                return;
+            }
+            player.setSneaking(true);
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                if (player.isOnline() && player.isSneaking()) player.setSneaking(false);
+            }, 2L);
+        }, 15L);
     }
 
     @EventHandler
