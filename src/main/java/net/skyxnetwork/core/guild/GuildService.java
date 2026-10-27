@@ -131,6 +131,69 @@ public final class GuildService {
         return value + "<reset>";
     }
 
+    /**
+     * Normalizes legacy color codes while keeping the visible tag uppercase.
+     * The previous create() path uppercased the entire tag, turning &d into
+     * &D (an invalid color code), which Bedrock displayed literally.
+     */
+    public static String normalizeTag(String raw) {
+        String value = raw == null ? "" : raw.trim();
+        StringBuilder out = new StringBuilder(value.length() + 4);
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c == '&' && i + 1 < value.length()) {
+                char code = Character.toLowerCase(value.charAt(i + 1));
+                if (isLegacyCode(code)) {
+                    out.append('&').append(code);
+                    i++;
+                    continue;
+                }
+                if (value.charAt(i + 1) == '#' && i + 7 < value.length()
+                        && isHex(value, i + 2, i + 8)) {
+                    out.append(value, i, i + 8);
+                    i += 7;
+                    continue;
+                }
+            }
+            out.append(Character.toUpperCase(c));
+        }
+        return out.toString();
+    }
+
+    public static String visibleTag(String raw) {
+        String value = raw == null ? "" : raw.trim();
+        StringBuilder out = new StringBuilder(value.length());
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c == '&' && i + 1 < value.length()) {
+                char code = Character.toLowerCase(value.charAt(i + 1));
+                if (isLegacyCode(code)) {
+                    i++;
+                    continue;
+                }
+                if (value.charAt(i + 1) == '#' && i + 7 < value.length()
+                        && isHex(value, i + 2, i + 8)) {
+                    i += 7;
+                    continue;
+                }
+            }
+            out.append(c);
+        }
+        return out.toString().trim();
+    }
+
+    private static boolean isLegacyCode(char code) {
+        return "0123456789abcdefklmnor".indexOf(code) >= 0;
+    }
+
+    private static boolean isHex(String value, int from, int to) {
+        if (to > value.length()) return false;
+        for (int i = from; i < to; i++) {
+            if (Character.digit(value.charAt(i), 16) < 0) return false;
+        }
+        return true;
+    }
+
     public Guild.Info guildByPlayer(UUID uuid) {
         try (Connection connection = database.open();
              PreparedStatement statement = connection.prepareStatement(
@@ -200,16 +263,17 @@ public final class GuildService {
 
     public Outcome create(String name, String tag, UUID leader) {
         String cleanName = name == null ? "" : name.trim();
-        String cleanTag = tag == null ? "" : tag.trim();
-        String visibleTag = ChatColor.stripColor(ChatColor.translateAlternateColorCodes('&', cleanTag));
+        String normalizedTag = normalizeTag(tag);
+        String visibleTag = visibleTag(normalizedTag);
         if (!cleanName.matches("[A-Za-z0-9_ ]{" + settings.guildNameMin + "," + settings.guildNameMax + "}")
                 || !visibleTag.matches("[A-Za-z0-9]{" + settings.guildTagMin + "," + settings.guildTagMax + "}")
-                || cleanTag.length() > 32) {
+                || normalizedTag.length() > 32) {
             return new Outcome(Result.INVALID, null);
         }
         for (Guild.Info existing : allGuilds()) {
-            String existingTag = ChatColor.stripColor(ChatColor.translateAlternateColorCodes('&', existing.tag()));
-            if (existingTag.equalsIgnoreCase(visibleTag)) return new Outcome(Result.NAME_TAKEN, null);
+            if (visibleTag(existing.tag()).equalsIgnoreCase(visibleTag)) {
+                return new Outcome(Result.NAME_TAKEN, null);
+            }
         }
         if (guildByPlayer(leader) != null) return new Outcome(Result.ALREADY_IN_GUILD, null);
         try (Connection connection = database.open()) {
@@ -220,7 +284,7 @@ public final class GuildService {
                             + "VALUES (?,?,?,?,?,0,?,0,?)",
                     Statement.RETURN_GENERATED_KEYS)) {
                 insert.setString(1, cleanName);
-                insert.setString(2, cleanTag.toUpperCase(Locale.ROOT));
+                insert.setString(2, normalizedTag);
                 insert.setString(3, leader.toString());
                 insert.setString(4, "");
                 insert.setLong(5, System.currentTimeMillis());
@@ -466,19 +530,18 @@ public final class GuildService {
     }
 
     public Result setTag(int guildId, String rawTag) {
-        String cleanTag = rawTag == null ? "" : rawTag.trim();
-        String visible = ChatColor.stripColor(ChatColor.translateAlternateColorCodes('&', cleanTag));
+        String normalizedTag = normalizeTag(rawTag);
+        String visible = visibleTag(normalizedTag);
         if (!visible.matches("[A-Za-z0-9]{" + settings.guildTagMin + "," + settings.guildTagMax + "}")
-                || cleanTag.length() > 32) return Result.INVALID;
+                || normalizedTag.length() > 32) return Result.INVALID;
         for (Guild.Info existing : allGuilds()) {
             if (existing.id() == guildId) continue;
-            String existingTag = ChatColor.stripColor(ChatColor.translateAlternateColorCodes('&', existing.tag()));
-            if (existingTag.equalsIgnoreCase(visible)) return Result.NAME_TAKEN;
+            if (visibleTag(existing.tag()).equalsIgnoreCase(visible)) return Result.NAME_TAKEN;
         }
         try (Connection connection = database.open();
              PreparedStatement statement = connection.prepareStatement(
                      "UPDATE " + database.table("guilds") + " SET tag=? WHERE id=?")) {
-            statement.setString(1, cleanTag);
+            statement.setString(1, normalizedTag);
             statement.setInt(2, guildId);
             statement.executeUpdate();
             refreshTagCacheAsync();
@@ -547,6 +610,58 @@ public final class GuildService {
             statement.setInt(2, guildId);
             statement.executeUpdate();
         } catch (SQLException ignored) {
+        }
+    }
+
+    public boolean canInvite(Guild.Info guild, Guild.Member member) {
+        return guild != null && member != null && member.role().atLeast(guild.inviteRole());
+    }
+
+    public boolean canWithdraw(Guild.Info guild, Guild.Member member) {
+        return guild != null && member != null && member.role().atLeast(guild.bankWithdrawRole());
+    }
+
+    public boolean canUseHome(Guild.Info guild, Guild.Member member) {
+        return guild != null && member != null && member.role().atLeast(guild.homeRole());
+    }
+
+    public Result setFriendlyFire(int guildId, boolean value) {
+        try (Connection connection = database.open();
+             PreparedStatement statement = connection.prepareStatement(
+                     "UPDATE " + database.table("guilds") + " SET friendly_fire=? WHERE id=?")) {
+            statement.setBoolean(1, value);
+            statement.setInt(2, guildId);
+            statement.executeUpdate();
+            refreshTagCacheAsync();
+            return Result.OK;
+        } catch (SQLException exception) {
+            return Result.INVALID;
+        }
+    }
+
+    public Result setBankWithdrawRole(int guildId, Guild.Role role) {
+        return setRoleSetting(guildId, "bank_withdraw_role", role);
+    }
+
+    public Result setInviteRole(int guildId, Guild.Role role) {
+        return setRoleSetting(guildId, "invite_role", role);
+    }
+
+    public Result setHomeRole(int guildId, Guild.Role role) {
+        return setRoleSetting(guildId, "home_role", role);
+    }
+
+    private Result setRoleSetting(int guildId, String column, Guild.Role role) {
+        try (Connection connection = database.open();
+             PreparedStatement statement = connection.prepareStatement(
+                     "UPDATE " + database.table("guilds") + " SET " + column + "=? WHERE id=?")) {
+            statement.setString(1, role.name());
+            statement.setInt(2, guildId);
+            statement.executeUpdate();
+            refreshTagCacheAsync();
+            return Result.OK;
+        } catch (SQLException exception) {
+            return Result.INVALID;
         }
     }
 
@@ -648,7 +763,7 @@ public final class GuildService {
         return new Guild.Info(
                 result.getInt("id"),
                 result.getString("name"),
-                result.getString("tag"),
+                normalizeTag(result.getString("tag")),
                 uuid(result.getString("leader_uuid")),
                 result.getString("description"),
                 result.getLong("created_at"),
@@ -656,6 +771,10 @@ public final class GuildService {
                 result.getDouble("power"),
                 result.getBoolean("open"),
                 result.getInt("max_members"),
+                result.getBoolean("friendly_fire"),
+                Guild.Role.parse(result.getString("bank_withdraw_role")),
+                Guild.Role.parse(result.getString("invite_role")),
+                Guild.Role.parse(result.getString("home_role")),
                 result.getString("home_world"),
                 nullableDouble(result, "home_x"),
                 nullableDouble(result, "home_y"),

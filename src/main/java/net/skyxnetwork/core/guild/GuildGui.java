@@ -9,10 +9,13 @@ import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.inventory.Inventory;
@@ -38,7 +41,7 @@ import java.util.function.Supplier;
 public final class GuildGui implements Listener {
 
     private enum Section { NO_GUILD, MAIN, MEMBERS, MEMBER_ACTIONS, INVITES, BANK, HOME, SETTINGS, POWER }
-    private enum InputType { CREATE, TAG, DESCRIPTION }
+    private enum InputType { CREATE, TAG, DESCRIPTION, BANK_DEPOSIT, BANK_WITHDRAW }
 
     private record PendingInput(InputType type, long expires) {
     }
@@ -265,21 +268,36 @@ public final class GuildGui implements Listener {
         Holder holder = new Holder(Section.BANK, player.getUniqueId(), snapshot.guild(),
                 snapshot.actor(), snapshot.members(), null);
         Inventory inventory = Bukkit.createInventory(holder, 54,
-                color("&8" + snapshot.guild().name() + " &7» &6Bank"));
+                color("&8" + snapshot.guild().name() + " &7» &6Guild Bank"));
         holder.inventory = inventory;
         fill(inventory);
+        boolean canWithdraw = guilds.canWithdraw(snapshot.guild(), snapshot.actor());
         inventory.setItem(4, item(Material.GOLD_BLOCK, "&6&lGuild Bank",
                 List.of("&7Balance: &e" + settings.money(snapshot.guild().bank()),
-                        "&7Leader and officers can withdraw."), false));
+                        "&7Deposits: &aeveryone",
+                        "&7Withdrawals: &f" + roleName(snapshot.guild().bankWithdrawRole()),
+                        "", canWithdraw ? "&aYou can withdraw." : "&cYou cannot withdraw."), false));
         long[] amounts = {1_000L, 10_000L, 100_000L};
         int[] depositSlots = {20, 21, 22};
         int[] withdrawSlots = {29, 30, 31};
         for (int index = 0; index < amounts.length; index++) {
             inventory.setItem(depositSlots[index], item(Material.EMERALD,
-                    "&aDeposit " + settings.money(amounts[index]), List.of(), false));
-            inventory.setItem(withdrawSlots[index], item(Material.REDSTONE,
-                    "&cWithdraw " + settings.money(amounts[index]), List.of(), false));
+                    "&aDeposit " + settings.money(amounts[index]),
+                    List.of("&7Click to deposit from your pocket."), false));
+            inventory.setItem(withdrawSlots[index], item(canWithdraw ? Material.REDSTONE : Material.GRAY_DYE,
+                    "&cWithdraw " + settings.money(amounts[index]),
+                    List.of(canWithdraw ? "&7Click to withdraw to your pocket."
+                            : "&cYour role cannot withdraw."), false));
         }
+        inventory.setItem(24, item(Material.EMERALD_BLOCK, "&a&lCustom Deposit",
+                List.of("&7Click and type any amount", "&7to deposit into the guild bank."), false));
+        inventory.setItem(33, item(canWithdraw ? Material.REDSTONE_BLOCK : Material.GRAY_DYE,
+                "&c&lCustom Withdraw",
+                List.of(canWithdraw ? "&7Click and type any amount"
+                        : "&cYour role cannot withdraw.",
+                        "&7Withdraw from the guild bank."), false));
+        inventory.setItem(18, item(Material.LIME_STAINED_GLASS_PANE, "&aDeposits", List.of(), false));
+        inventory.setItem(27, item(Material.RED_STAINED_GLASS_PANE, "&cWithdrawals", List.of(), false));
         backAndClose(inventory);
         player.openInventory(inventory);
     }
@@ -334,6 +352,18 @@ public final class GuildGui implements Listener {
         inventory.setItem(33, item(snapshot.guild().open() ? Material.LIME_DYE : Material.GRAY_DYE,
                 snapshot.guild().open() ? "&aOpen Guild" : "&7Invite Only",
                 List.of("&7Click to toggle open/invite-only."), false));
+        inventory.setItem(36, item(snapshot.guild().friendlyFire() ? Material.DIAMOND_SWORD : Material.IRON_SWORD,
+                "&eFriendly Fire: " + (snapshot.guild().friendlyFire() ? "&aON" : "&cOFF"),
+                List.of("&7Allow guild members to damage", "&7each other in PvP.", "", "&eClick to toggle."), false));
+        inventory.setItem(37, item(Material.GOLD_INGOT,
+                "&6Bank Withdraw: &f" + roleName(snapshot.guild().bankWithdrawRole()),
+                List.of("&7Choose which roles can withdraw", "&7from the guild bank.", "", "&eClick to cycle."), false));
+        inventory.setItem(38, item(Material.NAME_TAG,
+                "&bInvite Access: &f" + roleName(snapshot.guild().inviteRole()),
+                List.of("&7Choose which roles can invite", "&7players to the guild.", "", "&eClick to cycle."), false));
+        inventory.setItem(39, item(Material.RED_BED,
+                "&dHome Access: &f" + roleName(snapshot.guild().homeRole()),
+                List.of("&7Choose which roles can use", "&7the guild home.", "", "&eClick to cycle."), false));
         backAndClose(inventory);
         player.openInventory(inventory);
     }
@@ -384,6 +414,8 @@ public final class GuildGui implements Listener {
                 case CREATE -> createFromInput(player, message);
                 case TAG -> tagFromInput(player, message);
                 case DESCRIPTION -> descriptionFromInput(player, message);
+                case BANK_DEPOSIT -> bankFromInput(player, message, true);
+                case BANK_WITHDRAW -> bankFromInput(player, message, false);
             }
         });
     }
@@ -622,7 +654,7 @@ public final class GuildGui implements Listener {
     private void handleInvitesClick(Player player, Holder holder, int slot) {
         int index = indexOf(innerSlots(), slot);
         if (index < 0 || index >= holder.candidates.size()) return;
-        if (holder.actor == null || !holder.actor.role().atLeast(Guild.Role.OFFICER)) {
+        if (!guilds.canInvite(holder.guild, holder.actor)) {
             player.sendMessage(plugin.prefixed("guild-admin-only"));
             return;
         }
@@ -640,6 +672,18 @@ public final class GuildGui implements Listener {
     }
 
     private void handleBankClick(Player player, Holder holder, int slot) {
+        if (slot == 24) {
+            startBankInput(player, true);
+            return;
+        }
+        if (slot == 33) {
+            if (!guilds.canWithdraw(holder.guild, holder.actor)) {
+                player.sendMessage(plugin.prefixed("guild-bank-no-permission"));
+                return;
+            }
+            startBankInput(player, false);
+            return;
+        }
         long amount;
         boolean deposit;
         if (slot == 20) { amount = 1_000; deposit = true; }
@@ -649,7 +693,52 @@ public final class GuildGui implements Listener {
         else if (slot == 30) { amount = 10_000; deposit = false; }
         else if (slot == 31) { amount = 100_000; deposit = false; }
         else return;
+        if (!deposit && !guilds.canWithdraw(holder.guild, holder.actor)) {
+            player.sendMessage(plugin.prefixed("guild-bank-no-permission"));
+            return;
+        }
+        performBank(player, new BankContext(holder.guild, holder.actor), amount, deposit);
+    }
 
+    private void startBankInput(Player player, boolean deposit) {
+        player.closeInventory();
+        pendingInputs.put(player.getUniqueId(), new PendingInput(
+                deposit ? InputType.BANK_DEPOSIT : InputType.BANK_WITHDRAW,
+                System.currentTimeMillis() + 60_000L));
+        player.sendMessage(plugin.color(deposit
+                ? "&eType the amount to deposit in the guild bank."
+                : "&eType the amount to withdraw from the guild bank."));
+    }
+
+    private void bankFromInput(Player player, String message, boolean deposit) {
+        double amount;
+        try {
+            amount = Double.parseDouble(message.trim());
+        } catch (NumberFormatException exception) {
+            player.sendMessage(plugin.color("&cInvalid amount."));
+            open(player);
+            return;
+        }
+        if (amount <= 0) {
+            player.sendMessage(plugin.color("&cThe amount must be positive."));
+            open(player);
+            return;
+        }
+        async(() -> {
+            Guild.Info guild = guilds.guildByPlayer(player.getUniqueId());
+            Guild.Member member = guilds.member(player.getUniqueId());
+            return guild == null ? null : new BankContext(guild, member);
+        }, context -> {
+            if (context == null) {
+                player.sendMessage(plugin.prefixed("guild-none"));
+                open(player);
+                return;
+            }
+            performBank(player, context, amount, deposit);
+        });
+    }
+
+    private void performBank(Player player, BankContext context, double amount, boolean deposit) {
         if (deposit) {
             if (!plugin.getEconomy().available() || !plugin.getEconomy().has(player, amount)) {
                 player.sendMessage(plugin.prefixed("guild-bank-no-money"));
@@ -659,10 +748,9 @@ public final class GuildGui implements Listener {
                 player.sendMessage(plugin.prefixed("guild-bank-no-money"));
                 return;
             }
-            async(() -> guilds.depositBank(holder.guild.id(), amount), success -> {
+            async(() -> guilds.depositBank(context.guild().id(), amount), success -> {
                 if (Boolean.TRUE.equals(success)) {
-                    player.sendMessage(plugin.prefixed("guild-bank-deposited",
-                            "%amount%", settings.money(amount)));
+                    player.sendMessage(plugin.prefixed("guild-bank-deposited", "%amount%", settings.money(amount)));
                     async(() -> snapshot(player), snapshot -> {
                         if (snapshot != null) openBank(player, snapshot);
                     });
@@ -673,23 +761,22 @@ public final class GuildGui implements Listener {
             });
             return;
         }
-        if (holder.actor == null || !holder.actor.role().atLeast(Guild.Role.OFFICER)) {
+        if (!guilds.canWithdraw(context.guild(), context.member())) {
             player.sendMessage(plugin.prefixed("guild-bank-no-permission"));
             return;
         }
-        async(() -> guilds.withdrawBank(holder.guild.id(), amount), success -> {
+        async(() -> guilds.withdrawBank(context.guild().id(), amount), success -> {
             if (!Boolean.TRUE.equals(success)) {
                 player.sendMessage(plugin.prefixed("guild-bank-no-funds"));
                 return;
             }
             if (!plugin.getEconomy().deposit(player, amount)) {
                 Bukkit.getScheduler().runTaskAsynchronously(plugin,
-                        () -> guilds.depositBank(holder.guild.id(), amount));
+                        () -> guilds.depositBank(context.guild().id(), amount));
                 player.sendMessage(plugin.prefixed("guild-bank-no-funds"));
                 return;
             }
-            player.sendMessage(plugin.prefixed("guild-bank-withdrew",
-                    "%amount%", settings.money(amount)));
+            player.sendMessage(plugin.prefixed("guild-bank-withdrew", "%amount%", settings.money(amount)));
             async(() -> snapshot(player), snapshot -> {
                 if (snapshot != null) openBank(player, snapshot);
             });
@@ -699,6 +786,10 @@ public final class GuildGui implements Listener {
     private void handleHomeClick(Player player, Holder holder, int slot) {
         if (slot == 20) {
             Guild.Info guild = holder.guild;
+            if (!guilds.canUseHome(guild, holder.actor)) {
+                player.sendMessage(plugin.prefixed("guild-admin-only"));
+                return;
+            }
             if (guild.homeWorld() == null) {
                 player.sendMessage(plugin.prefixed("guild-home-none"));
                 return;
@@ -743,11 +834,48 @@ public final class GuildGui implements Listener {
         int[] slots = {10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29};
         int index = indexOf(slots, slot);
         if (index >= 0) {
-            String plain = ChatColor.stripColor(ChatColor.translateAlternateColorCodes('&', holder.guild.tag()));
+            String plain = GuildService.visibleTag(holder.guild.tag());
             async(() -> guilds.setTag(holder.guild.id(), "&" + colors[index] + plain), result -> {
                 player.sendMessage(plugin.prefixed(result == GuildService.Result.OK
                         ? "guild-tag-set" : "guild-tag-invalid",
                         "%tag%", "&" + colors[index] + plain));
+                async(() -> snapshot(player), snapshot -> {
+                    if (snapshot != null) openSettings(player, snapshot);
+                });
+            });
+            return;
+        }
+        if (slot == 36) {
+            async(() -> guilds.setFriendlyFire(holder.guild.id(), !holder.guild.friendlyFire()), result -> {
+                player.sendMessage(plugin.color(holder.guild.friendlyFire()
+                        ? "&cGuild friendly fire disabled." : "&aGuild friendly fire enabled."));
+                async(() -> snapshot(player), snapshot -> {
+                    if (snapshot != null) openSettings(player, snapshot);
+                });
+            });
+            return;
+        }
+        if (slot == 37) {
+            async(() -> guilds.setBankWithdrawRole(holder.guild.id(), nextRole(holder.guild.bankWithdrawRole())), result -> {
+                player.sendMessage(plugin.color("&7Bank withdraw access updated."));
+                async(() -> snapshot(player), snapshot -> {
+                    if (snapshot != null) openSettings(player, snapshot);
+                });
+            });
+            return;
+        }
+        if (slot == 38) {
+            async(() -> guilds.setInviteRole(holder.guild.id(), nextRole(holder.guild.inviteRole())), result -> {
+                player.sendMessage(plugin.color("&7Invite access updated."));
+                async(() -> snapshot(player), snapshot -> {
+                    if (snapshot != null) openSettings(player, snapshot);
+                });
+            });
+            return;
+        }
+        if (slot == 39) {
+            async(() -> guilds.setHomeRole(holder.guild.id(), nextRole(holder.guild.homeRole())), result -> {
+                player.sendMessage(plugin.color("&7Guild home access updated."));
                 async(() -> snapshot(player), snapshot -> {
                     if (snapshot != null) openSettings(player, snapshot);
                 });
@@ -778,6 +906,34 @@ public final class GuildGui implements Listener {
                     if (snapshot != null) openSettings(player, snapshot);
                 });
             });
+        }
+    }
+
+    private Guild.Role nextRole(Guild.Role role) {
+        return switch (role) {
+            case LEADER -> Guild.Role.OFFICER;
+            case OFFICER -> Guild.Role.MEMBER;
+            case MEMBER -> Guild.Role.LEADER;
+        };
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onGuildDamage(EntityDamageByEntityEvent event) {
+        if (!(event.getEntity() instanceof Player victim)) return;
+        Entity entity = event.getDamager();
+        Player damager = null;
+        if (entity instanceof Player player) {
+            damager = player;
+        } else if (entity instanceof Projectile projectile && projectile.getShooter() instanceof Player player) {
+            damager = player;
+        }
+        if (damager == null || damager.getUniqueId().equals(victim.getUniqueId())) return;
+        Guild.Info victimGuild = guilds.cachedGuild(victim.getUniqueId());
+        Guild.Info damagerGuild = guilds.cachedGuild(damager.getUniqueId());
+        if (victimGuild != null && damagerGuild != null
+                && victimGuild.id() == damagerGuild.id()
+                && !victimGuild.friendlyFire()) {
+            event.setCancelled(true);
         }
     }
 
@@ -868,6 +1024,9 @@ public final class GuildGui implements Listener {
                 Bukkit.getScheduler().runTask(plugin, () -> callback.accept(null));
             }
         });
+    }
+
+    private record BankContext(Guild.Info guild, Guild.Member member) {
     }
 
     private record Snapshot(Guild.Info guild, Guild.Member actor, List<Guild.Member> members) {

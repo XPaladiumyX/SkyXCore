@@ -181,7 +181,7 @@ public final class GuildCommand implements CommandExecutor, TabCompleter {
             Guild.Info guild = plugin.getGuildService().guildByPlayer(player.getUniqueId());
             Guild.Member member = plugin.getGuildService().member(player.getUniqueId());
             if (guild == null || member == null) return null;
-            if (!member.role().atLeast(Guild.Role.OFFICER)) return null;
+            if (!plugin.getGuildService().canInvite(guild, member)) return null;
             return new InviteResult(guild, plugin.getGuildService().invite(guild.id(),
                     target.getUniqueId(), player.getUniqueId()));
         }, result -> {
@@ -376,9 +376,18 @@ public final class GuildCommand implements CommandExecutor, TabCompleter {
                     "%seconds%", Long.toString((cooldown - now) / 1000)));
             return;
         }
-        async(() -> plugin.getGuildService().guildByPlayer(player.getUniqueId()), guild -> {
-            if (guild == null) {
+        async(() -> {
+            Guild.Info guild = plugin.getGuildService().guildByPlayer(player.getUniqueId());
+            if (guild == null) return null;
+            return new HomeContext(guild, plugin.getGuildService().member(player.getUniqueId()));
+        }, context -> {
+            if (context == null) {
                 player.sendMessage(plugin.prefixed("guild-none"));
+                return;
+            }
+            Guild.Info guild = context.guild();
+            if (!plugin.getGuildService().canUseHome(guild, context.member())) {
+                player.sendMessage(plugin.prefixed("guild-admin-only"));
                 return;
             }
             if (!plugin.getSettings().guildHomeEnabled || guild.homeWorld() == null) {
@@ -484,7 +493,7 @@ public final class GuildCommand implements CommandExecutor, TabCompleter {
                 });
                 return;
             }
-            if (context.member() == null || !context.member().role().atLeast(Guild.Role.OFFICER)) {
+            if (!plugin.getGuildService().canWithdraw(guild, context.member())) {
                 player.sendMessage(plugin.prefixed("guild-bank-no-permission"));
                 return;
             }
@@ -633,6 +642,9 @@ public final class GuildCommand implements CommandExecutor, TabCompleter {
     }
 
     private record ChatResult(Guild.Info guild, List<Guild.Member> members) {
+    }
+
+    private record HomeContext(Guild.Info guild, Guild.Member member) {
     }
 
     private record HomeResult(Guild.Info guild, GuildService.Result result) {

@@ -139,6 +139,23 @@ public final class Database {
                     + "PRIMARY KEY (season_id, category, rank_position)"
                     + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
             statement.execute("ALTER TABLE " + guilds + " MODIFY tag VARCHAR(32) NOT NULL;");
+            addColumn(connection, guilds, "friendly_fire", "BOOLEAN NOT NULL DEFAULT 0");
+            addColumn(connection, guilds, "bank_withdraw_role", "VARCHAR(16) NOT NULL DEFAULT 'OFFICER'");
+            addColumn(connection, guilds, "invite_role", "VARCHAR(16) NOT NULL DEFAULT 'OFFICER'");
+            addColumn(connection, guilds, "home_role", "VARCHAR(16) NOT NULL DEFAULT 'MEMBER'");
+        }
+    }
+
+    private static void addColumn(Connection connection, String table, String column, String definition)
+            throws SQLException {
+        try (Statement statement = connection.createStatement()) {
+            statement.execute("ALTER TABLE " + table + " ADD COLUMN " + column + " " + definition + ";");
+        } catch (SQLException exception) {
+            String message = exception.getMessage() == null ? "" : exception.getMessage().toLowerCase();
+            if (exception.getErrorCode() != 1060 && !message.contains("duplicate column")
+                    && !message.contains("already exists")) {
+                throw exception;
+            }
         }
     }
 

@@ -59,10 +59,12 @@ public final class RtpPassengerDetachListener implements Listener {
     public void onTeleport(PlayerTeleportEvent event) {
         Player player = event.getPlayer();
         UUID id = player.getUniqueId();
-        detach(player);
 
         if (event.getCause() != PlayerTeleportEvent.TeleportCause.PLUGIN || event.isCancelled()) return;
-        if (replayingTeleport.contains(id)) return;
+        if (replayingTeleport.contains(id)) {
+            detach(player);
+            return;
+        }
 
         Long until = pendingRtpTeleports.get(id);
         if (until == null) return;
@@ -73,6 +75,10 @@ public final class RtpPassengerDetachListener implements Listener {
         Location to = event.getTo();
         if (to == null) return;
 
+        // Only RTP/hub/Lobby teleports touch the display passengers. Detaching
+        // them on normal TPA/home teleports caused Geyser to leave the two
+        // nametag lines at their old position until the target sneaked.
+        detach(player);
         pendingRtpTeleports.remove(id);
         event.setCancelled(true);
         Location target = to.clone();

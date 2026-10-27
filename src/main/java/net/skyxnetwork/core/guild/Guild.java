@@ -24,6 +24,7 @@ public final class Guild {
 
     public record Info(int id, String name, String tag, UUID leader, String description,
                        long createdAt, double bank, double power, boolean open, int maxMembers,
+                       boolean friendlyFire, Role bankWithdrawRole, Role inviteRole, Role homeRole,
                        String homeWorld, Double homeX, Double homeY, Double homeZ,
                        Float homeYaw, Float homePitch) {
     }
