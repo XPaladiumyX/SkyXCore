@@ -60,16 +60,19 @@ public final class PlayerHolograms implements Listener {
     private final Map<UUID, PlayerDisplays> displays = new ConcurrentHashMap<>();
     private final Map<UUID, Boolean> bedrockCache = new ConcurrentHashMap<>();
     private final Queue<UUID> refreshQueue = new ConcurrentLinkedQueue<>();
+    private final EligibleNametagStyler eligibleNametagStyler;
     private final Class<?> gsitApiClass;
     private final Method gsitIsSitting;
     private BukkitTask textTask;
     private BukkitTask visibilityTask;
     private BukkitTask refreshTask;
     private BukkitTask refreshDrainTask;
+    private BukkitTask styleTask;
 
     public PlayerHolograms(SkyXCore plugin, CoreSettings settings) {
         this.plugin = plugin;
         this.settings = settings;
+        this.eligibleNametagStyler = new EligibleNametagStyler(plugin);
         Class<?> apiClass = null;
         Method isSitting = null;
         Plugin gsit = Bukkit.getPluginManager().getPlugin("GSit");
@@ -121,6 +124,8 @@ public final class PlayerHolograms implements Listener {
                     this::queueRefresh, refreshTicks, refreshTicks);
             refreshDrainTask = Bukkit.getScheduler().runTaskTimer(plugin,
                     this::drainRefresh, 1L, 1L);
+            styleTask = Bukkit.getScheduler().runTaskTimer(plugin,
+                    eligibleNametagStyler::styleAll, 20L, 20L);
         }
     }
 
@@ -129,10 +134,12 @@ public final class PlayerHolograms implements Listener {
         if (visibilityTask != null) visibilityTask.cancel();
         if (refreshTask != null) refreshTask.cancel();
         if (refreshDrainTask != null) refreshDrainTask.cancel();
+        if (styleTask != null) styleTask.cancel();
         textTask = null;
         visibilityTask = null;
         refreshTask = null;
         refreshDrainTask = null;
+        styleTask = null;
     }
 
     private void tickText() {
