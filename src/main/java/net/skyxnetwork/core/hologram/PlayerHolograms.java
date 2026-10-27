@@ -29,6 +29,8 @@ import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.event.player.PlayerToggleSneakEvent;
 import org.bukkit.plugin.Plugin;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Transformation;
 import org.joml.Quaternionf;
@@ -178,7 +180,7 @@ public final class PlayerHolograms implements Listener {
                 else spawn(player);
             }
             if (settings.playerHologramRefreshEligible && hasBedrockViewerNearby(player)) {
-                pulsePose(player);
+                refreshBedrockNametag(player);
             }
         }
     }
@@ -192,20 +194,14 @@ public final class PlayerHolograms implements Listener {
     }
 
     /**
-     * Bedrock can keep passenger nametags at a stale height until the target
-     * player's pose metadata changes. A single tick is enough to force the
-     * client to recalculate the passenger position, while keeping the visual
-     * crouch as short as possible.
+     * Geyser refreshes stale TextDisplay passenger positions when the target's
+     * entity state changes. A no-icon, no-particle Luck effect is enough to
+     * trigger that refresh without changing the player's pose or movement.
      */
-    private void pulsePose(Player player) {
-        if (player.isDead() || player.getHealth() <= 0.0
-                || player.isInsideVehicle() || player.isSneaking()) {
-            return;
-        }
-        player.setSneaking(true);
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            if (player.isOnline() && player.isSneaking()) player.setSneaking(false);
-        }, 1L);
+    private void refreshBedrockNametag(Player player) {
+        if (player.isDead() || player.getHealth() <= 0.0) return;
+        player.addPotionEffect(new PotionEffect(
+                PotionEffectType.LUCK, 2, 0, true, false, false));
     }
 
     @EventHandler
