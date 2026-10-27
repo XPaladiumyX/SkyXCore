@@ -152,7 +152,7 @@ public final class GuildGui implements Listener {
         fill(inventory);
         CoreSettings.GuildPowerWeights weights = settings.guildPower;
         inventory.setItem(4, item(Material.EXPERIENCE_BOTTLE, "&e&lHow Guild Power Works",
-                List.of("&7Power is recalculated every 5 minutes.",
+                List.of("&7Power is recalculated every minute.",
                         "&7It is the sum of all member activity.",
                         "&7Higher power = higher guild rank."), true));
         inventory.setItem(20, item(Material.IRON_SWORD, "&cPvP Kills",
@@ -608,7 +608,9 @@ public final class GuildGui implements Listener {
             }, result -> {
                 if (result == GuildService.Result.OK) {
                     player.sendMessage(plugin.prefixed("guild-promoted", "%player%", target.name()));
-                    openMembers(player, new Snapshot(holder.guild, holder.actor, holder.members));
+                    async(() -> snapshot(player), snapshot -> {
+                        if (snapshot != null) openMembers(player, snapshot);
+                    });
                 } else {
                     player.sendMessage(plugin.prefixed("guild-leader-only"));
                 }
@@ -622,7 +624,9 @@ public final class GuildGui implements Listener {
             }, result -> {
                 if (result == GuildService.Result.OK) {
                     player.sendMessage(plugin.prefixed("guild-demoted", "%player%", target.name()));
-                    openMembers(player, new Snapshot(holder.guild, holder.actor, holder.members));
+                    async(() -> snapshot(player), snapshot -> {
+                        if (snapshot != null) openMembers(player, snapshot);
+                    });
                 } else {
                     player.sendMessage(plugin.prefixed("guild-leader-only"));
                 }

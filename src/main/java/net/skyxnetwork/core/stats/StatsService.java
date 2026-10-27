@@ -21,6 +21,7 @@ import org.bukkit.scheduler.BukkitTask;
 
 import net.skyxnetwork.core.SkyXCore;
 import net.skyxnetwork.core.core.CoreSettings;
+import net.skyxnetwork.core.guild.Guild;
 import net.skyxnetwork.core.core.Database;
 import net.skyxnetwork.core.core.PlayerRegistry;
 import net.skyxnetwork.core.season.SeasonService;
@@ -185,6 +186,12 @@ public final class StatsService implements Listener {
         if (killer == null || killer.getUniqueId().equals(victim.getUniqueId())) return;
         if (settings.pvpBlockSameIp && sameIp(killer, victim)) {
             killer.sendMessage(plugin.prefixed("stats-kill-same-ip"));
+            return;
+        }
+        Guild.Info killerGuild = plugin.getGuildService().cachedGuild(killer.getUniqueId());
+        Guild.Info victimGuild = plugin.getGuildService().cachedGuild(victim.getUniqueId());
+        if (killerGuild != null && victimGuild != null && killerGuild.id() == victimGuild.id()) {
+            killer.sendMessage(plugin.prefixed("stats-kill-same-guild"));
             return;
         }
         String key = killer.getUniqueId() + ":" + victim.getUniqueId();

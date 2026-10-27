@@ -693,6 +693,8 @@ public final class GuildService {
             power += guild.bank() * settings.guildPower.bank();
             setPower(guild.id(), power);
         }
+        // Keep placeholder/TAB power in sync with the freshly calculated DB values.
+        refreshTagCacheAsync();
     }
 
     public List<Guild.Info> allGuilds() {

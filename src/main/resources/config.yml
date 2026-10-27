@@ -259,6 +259,7 @@ gui:
 
 messages:
   stats-kill-same-ip: "&cKill not counted: you share the same IP as the victim (anti-farm)."
+  stats-kill-same-guild: "&cKill not counted: you and the victim are in the same guild."
   stats-kill-cooldown: "&cKill not counted: this victim was killed recently (anti-farm). Try again in %seconds%s."
   prefix: "&8[&dSkyXCore&8] &r"
   no-permission: "&cYou do not have permission to do that."
@@ -314,7 +315,7 @@ messages:
   guild-bank-withdrew: "&aWithdrew &e%amount% &afrom the guild bank."
   guild-bank-no-money: "&cYou do not have enough money."
   guild-bank-no-funds: "&cThe guild bank does not have enough money."
-  guild-bank-no-permission: "&cOnly the leader and officers can withdraw."
+  guild-bank-no-permission: "&cYour guild role cannot withdraw money from the bank."
   guild-tag-set: "&aGuild tag set to %tag%&a."
   guild-tag-invalid: "&cInvalid tag. Use 3-8 visible characters and legacy color codes."
   guild-tag-taken: "&cThat visible guild tag is already used."

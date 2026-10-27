@@ -139,7 +139,7 @@ public final class SkyXCore extends JavaPlugin {
     private void startPowerTask() {
         if (powerTask != null) powerTask.cancel();
         powerTask = Bukkit.getScheduler().runTaskTimerAsynchronously(this,
-                () -> guildService.recalculatePowers(), 200L, 20L * 300L);
+                () -> guildService.recalculatePowers(), 200L, 20L * 60L);
     }
 
     public void reloadCore() {
