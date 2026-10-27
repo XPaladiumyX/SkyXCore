@@ -36,8 +36,10 @@ import org.joml.Vector3f;
 
 import java.lang.reflect.Method;
 import java.util.Map;
+import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
  * Per-player stat line above the nametag.
@@ -49,18 +51,25 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class PlayerHolograms implements Listener {
 
+    private static final int REFRESH_BATCH_SIZE = 4;
+
     private final SkyXCore plugin;
     private volatile CoreSettings settings;
     private final Map<UUID, PlayerDisplays> displays = new ConcurrentHashMap<>();
     private final Map<UUID, Boolean> bedrockCache = new ConcurrentHashMap<>();
+    private final Queue<UUID> refreshQueue = new ConcurrentLinkedQueue<>();
+    private final EligibleNametagRefresher eligibleNametagRefresher;
     private final Class<?> gsitApiClass;
     private final Method gsitIsSitting;
     private BukkitTask textTask;
     private BukkitTask visibilityTask;
+    private BukkitTask refreshTask;
+    private BukkitTask refreshDrainTask;
 
     public PlayerHolograms(SkyXCore plugin, CoreSettings settings) {
         this.plugin = plugin;
         this.settings = settings;
+        this.eligibleNametagRefresher = new EligibleNametagRefresher(plugin);
         Class<?> apiClass = null;
         Method isSitting = null;
         Plugin gsit = Bukkit.getPluginManager().getPlugin("GSit");
@@ -88,6 +97,7 @@ public final class PlayerHolograms implements Listener {
     public void stop() {
         HandlerList.unregisterAll(this);
         cancelTasks();
+        refreshQueue.clear();
         for (PlayerDisplays pd : displays.values()) pd.remove();
         displays.clear();
     }
@@ -100,17 +110,29 @@ public final class PlayerHolograms implements Listener {
 
     private void restartTasks() {
         cancelTasks();
-        if (!settings.playerHologramsEnabled) return;
-        long textTicks = Math.max(5L, settings.playerHologramUpdateTicks);
-        textTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tickText, textTicks, textTicks);
-        visibilityTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tickVisibility, 5L, 5L);
+        if (settings.playerHologramsEnabled) {
+            long textTicks = Math.max(5L, settings.playerHologramUpdateTicks);
+            textTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tickText, textTicks, textTicks);
+            visibilityTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tickVisibility, 5L, 5L);
+        }
+        if (settings.playerHologramsEnabled || settings.playerHologramRefreshEligible) {
+            long refreshTicks = Math.max(100L, settings.playerHologramRefreshSeconds * 20L);
+            refreshTask = Bukkit.getScheduler().runTaskTimer(plugin,
+                    this::queueRefresh, refreshTicks, refreshTicks);
+            refreshDrainTask = Bukkit.getScheduler().runTaskTimer(plugin,
+                    this::drainRefresh, 1L, 1L);
+        }
     }
 
     private void cancelTasks() {
         if (textTask != null) textTask.cancel();
         if (visibilityTask != null) visibilityTask.cancel();
+        if (refreshTask != null) refreshTask.cancel();
+        if (refreshDrainTask != null) refreshDrainTask.cancel();
         textTask = null;
         visibilityTask = null;
+        refreshTask = null;
+        refreshDrainTask = null;
     }
 
     private void tickText() {
@@ -132,6 +154,28 @@ public final class PlayerHolograms implements Listener {
         for (Player player : Bukkit.getOnlinePlayers()) {
             PlayerDisplays pd = displays.get(player.getUniqueId());
             if (pd != null && pd.valid(player)) updateVisibility(player, pd);
+        }
+    }
+
+    /**
+     * Starts a soft, staggered refresh cycle. Recreating a handful of displays
+     * per tick avoids a large packet/entity spike when many players are online.
+     */
+    private void queueRefresh() {
+        refreshQueue.clear();
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            refreshQueue.add(player.getUniqueId());
+        }
+    }
+
+    private void drainRefresh() {
+        for (int index = 0; index < REFRESH_BATCH_SIZE; index++) {
+            UUID id = refreshQueue.poll();
+            if (id == null) return;
+            Player player = Bukkit.getPlayer(id);
+            if (player == null || !player.isOnline()) continue;
+            if (settings.playerHologramsEnabled && !ignored(player)) spawn(player);
+            if (settings.playerHologramRefreshEligible) eligibleNametagRefresher.refresh(player);
         }
     }
 
@@ -290,14 +334,19 @@ public final class PlayerHolograms implements Listener {
     private void showLine(Player owner, PlayerDisplays pd) {
         if (pd.hidden) return;
         for (Player viewer : Bukkit.getOnlinePlayers()) {
-            if (!viewer.getUniqueId().equals(pd.ownerId)) show(viewer, pd);
+            if (viewer.getUniqueId().equals(pd.ownerId)) continue;
+            if (canSee(viewer, owner)) show(viewer, pd);
+            else hide(viewer, pd);
         }
     }
 
     private void show(Player viewer, PlayerDisplays pd) {
         if (pd.hidden || viewer.getUniqueId().equals(pd.ownerId)) return;
         Player owner = Bukkit.getPlayer(pd.ownerId);
-        if (owner == null || viewer.getWorld() != owner.getWorld()) return;
+        if (owner == null || !canSee(viewer, owner)) {
+            hide(viewer, pd);
+            return;
+        }
         try {
             Location location = owner.getLocation();
             if (pd.javaDisplay != null && pd.javaDisplay.isValid()) pd.javaDisplay.teleport(location);
@@ -322,6 +371,13 @@ public final class PlayerHolograms implements Listener {
                 mount(viewer, owner, pd.javaDisplay);
             }
         });
+    }
+
+    private boolean canSee(Player viewer, Player owner) {
+        if (viewer.getUniqueId().equals(owner.getUniqueId())) return false;
+        if (viewer.getWorld() != owner.getWorld()) return false;
+        double maxDistance = settings.playerHologramViewDistance;
+        return viewer.getLocation().distanceSquared(owner.getLocation()) <= maxDistance * maxDistance;
     }
 
     private void hide(Player viewer, PlayerDisplays pd) {

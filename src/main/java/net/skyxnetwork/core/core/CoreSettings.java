@@ -64,6 +64,9 @@ public final class CoreSettings {
     public final double playerHologramBedrockHeight;
     public final int playerHologramUpdateTicks;
     public final int playerHologramMoveTicks;
+    public final int playerHologramRefreshSeconds;
+    public final double playerHologramViewDistance;
+    public final boolean playerHologramRefreshEligible;
     public final String playerHologramFormat;
     public final Set<String> playerHologramIgnoredWorlds;
     public final List<Category> categories;
@@ -131,6 +134,10 @@ public final class CoreSettings {
                 config.getDouble("holograms.bedrock-height", playerHologramHeight)));
         playerHologramUpdateTicks = clamp(config.getInt("holograms.update-interval-ticks", 20), 5, 200);
         playerHologramMoveTicks = clamp(config.getInt("holograms.move-interval-ticks", 5), 1, 40);
+        playerHologramRefreshSeconds = clamp(config.getInt("holograms.refresh-interval-seconds", 20), 5, 300);
+        playerHologramViewDistance = Math.max(8.0, Math.min(128.0,
+                config.getDouble("holograms.view-distance", 64.0)));
+        playerHologramRefreshEligible = config.getBoolean("holograms.refresh-eligible-nametag", true);
         playerHologramFormat = config.getString("holograms.format",
                 "&6$%lighteconomy_money% &8| &c⚔ %skyxcore_pvp_kills% &8| &eBounty %notbounties_bounty_formatted%");
         playerHologramIgnoredWorlds = Set.copyOf(config.getStringList("holograms.ignored-worlds"));

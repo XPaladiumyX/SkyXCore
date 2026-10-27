@@ -181,6 +181,12 @@ holograms:
   bedrock-height: 0.55
   update-interval-ticks: 20
   move-interval-ticks: 5
+  # Full hard refresh: recreate the stat displays and re-send the Eligible
+  # nametag lines to nearby viewers. The work is spread over multiple ticks
+  # so a large online count does not create a single-tick spike.
+  refresh-interval-seconds: 20
+  view-distance: 64
+  refresh-eligible-nametag: true
   format: "&6$%lighteconomy_money% &8| &c⚔ %skyxcore_pvp_kills% &8| &eBounty %notbounties_bounty_formatted%"
   ignored-worlds: []
 
