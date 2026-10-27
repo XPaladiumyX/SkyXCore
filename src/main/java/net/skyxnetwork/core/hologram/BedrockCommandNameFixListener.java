@@ -1,5 +1,8 @@
 package net.skyxnetwork.core.hologram;
 
+import org.bukkit.Bukkit;
+import org.bukkit.command.Command;
+import org.bukkit.command.PluginCommand;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -22,17 +25,26 @@ public final class BedrockCommandNameFixListener implements Listener {
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onPlayerCommand(PlayerCommandPreprocessEvent event) {
-        String rewritten = quoteStarNames(event.getMessage());
+        String rewritten = rewrite(event.getMessage(), true);
         if (!rewritten.equals(event.getMessage())) event.setMessage(rewritten);
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onConsoleCommand(ServerCommandEvent event) {
-        String rewritten = quoteStarNames(event.getCommand());
+        String rewritten = rewrite(event.getCommand(), false);
         if (!rewritten.equals(event.getCommand())) event.setCommand(rewritten);
     }
 
-    private String quoteStarNames(String command) {
+    private String rewrite(String command, boolean playerCommand) {
+        String withoutSlash = playerCommand && command.startsWith("/") ? command.substring(1) : command;
+        int space = withoutSlash.indexOf(' ');
+        String label = (space < 0 ? withoutSlash : withoutSlash.substring(0, space)).toLowerCase();
+        Command bukkitCommand = Bukkit.getCommandMap().getCommand(label);
+        // Legacy plugin commands receive Bukkit args with quotes kept literally.
+        // They generally resolve players through Bukkit/their database themselves,
+        // so only vanilla/Brigadier commands need the Floodgate name quoting.
+        if (bukkitCommand instanceof PluginCommand) return command;
+
         Matcher matcher = STAR_NAME.matcher(command);
         StringBuffer out = new StringBuffer(command.length() + 8);
         while (matcher.find()) {
