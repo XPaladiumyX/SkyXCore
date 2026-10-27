@@ -5,6 +5,8 @@ import net.skyxnetwork.core.SkyXCore;
 import org.bukkit.OfflinePlayer;
 import org.jetbrains.annotations.NotNull;
 
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.util.Locale;
 
 /**
@@ -62,6 +64,9 @@ public final class SkyXCoreExpansion extends PlaceholderExpansion {
         if (key.equals("guild_power") || key.equals("guildpower")) {
             return plugin.getSettings().number(plugin.getGuildService().guildPower(player.getUniqueId()));
         }
+        if (key.equals("money_short") || key.equals("moneyshort")) {
+            return compactMoney(plugin.getEconomy().balance(player));
+        }
         if (key.equals("pvp_kills") || key.equals("pvp")) {
             return Long.toString(plugin.getStatsService().cachedValue(player.getUniqueId(), "PVP_KILLS"));
         }
@@ -78,5 +83,28 @@ public final class SkyXCoreExpansion extends PlaceholderExpansion {
             return Long.toString(plugin.getStatsService().cachedValue(player.getUniqueId(), "BOSS_DAMAGE"));
         }
         return null;
+    }
+
+    private String compactMoney(double value) {
+        double absolute = Math.abs(value);
+        double divisor;
+        String suffix;
+        if (absolute >= 1_000_000_000_000D) {
+            divisor = 1_000_000_000_000D;
+            suffix = "t";
+        } else if (absolute >= 1_000_000_000D) {
+            divisor = 1_000_000_000D;
+            suffix = "b";
+        } else if (absolute >= 1_000_000D) {
+            divisor = 1_000_000D;
+            suffix = "m";
+        } else if (absolute >= 1_000D) {
+            divisor = 1_000D;
+            suffix = "k";
+        } else {
+            return plugin.getSettings().number(value);
+        }
+        DecimalFormat format = new DecimalFormat("0.##", DecimalFormatSymbols.getInstance(Locale.US));
+        return format.format(value / divisor) + suffix;
     }
 }
