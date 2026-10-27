@@ -58,7 +58,6 @@ public final class PlayerHolograms implements Listener {
     private final Map<UUID, PlayerDisplays> displays = new ConcurrentHashMap<>();
     private final Map<UUID, Boolean> bedrockCache = new ConcurrentHashMap<>();
     private final Queue<UUID> refreshQueue = new ConcurrentLinkedQueue<>();
-    private final EligibleNametagRefresher eligibleNametagRefresher;
     private final Class<?> gsitApiClass;
     private final Method gsitIsSitting;
     private BukkitTask textTask;
@@ -69,7 +68,6 @@ public final class PlayerHolograms implements Listener {
     public PlayerHolograms(SkyXCore plugin, CoreSettings settings) {
         this.plugin = plugin;
         this.settings = settings;
-        this.eligibleNametagRefresher = new EligibleNametagRefresher(plugin);
         Class<?> apiClass = null;
         Method isSitting = null;
         Plugin gsit = Bukkit.getPluginManager().getPlugin("GSit");
@@ -174,31 +172,28 @@ public final class PlayerHolograms implements Listener {
             if (id == null) return;
             Player player = Bukkit.getPlayer(id);
             if (player == null || !player.isOnline()) continue;
-            if (settings.playerHologramsEnabled && !ignored(player)) spawn(player);
-            if (settings.playerHologramRefreshEligible) eligibleNametagRefresher.refresh(player);
-            scheduleSneakPulse(player);
+            if (settings.playerHologramsEnabled && !ignored(player)) {
+                PlayerDisplays pd = displays.get(player.getUniqueId());
+                if (pd != null && pd.valid(player)) updateText(player, pd);
+                else spawn(player);
+            }
+            if (settings.playerHologramRefreshEligible) pulsePose(player);
         }
     }
 
     /**
-     * Bedrock can keep the passenger nametag at a stale height until the
-     * target player's pose metadata changes. A short pose pulse reproduces the
-     * manual sneak/unsneak reset without permanently changing the player.
+     * Bedrock can keep passenger nametags at a stale height until the target
+     * player's pose metadata changes. Flip the pose in the same tick: the
+     * client receives both updates together, so this resets the passenger
+     * position without the visible two-tick crouch caused by a delayed reset.
      */
-    private void scheduleSneakPulse(Player player) {
-        if (player.isDead() || player.getHealth() <= 0.0 || player.isInsideVehicle() || player.isSneaking()) {
+    private void pulsePose(Player player) {
+        if (player.isDead() || player.getHealth() <= 0.0
+                || player.isInsideVehicle() || player.isSneaking()) {
             return;
         }
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            if (!player.isOnline() || player.isDead() || player.getHealth() <= 0.0
-                    || player.isInsideVehicle() || player.isSneaking()) {
-                return;
-            }
-            player.setSneaking(true);
-            Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                if (player.isOnline() && player.isSneaking()) player.setSneaking(false);
-            }, 2L);
-        }, 15L);
+        player.setSneaking(true);
+        player.setSneaking(false);
     }
 
     @EventHandler
