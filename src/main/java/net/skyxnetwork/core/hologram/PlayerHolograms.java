@@ -177,15 +177,25 @@ public final class PlayerHolograms implements Listener {
                 if (pd != null && pd.valid(player)) updateText(player, pd);
                 else spawn(player);
             }
-            if (settings.playerHologramRefreshEligible) pulsePose(player);
+            if (settings.playerHologramRefreshEligible && hasBedrockViewerNearby(player)) {
+                pulsePose(player);
+            }
         }
+    }
+
+    private boolean hasBedrockViewerNearby(Player owner) {
+        for (Player viewer : Bukkit.getOnlinePlayers()) {
+            if (viewer.getUniqueId().equals(owner.getUniqueId()) || !isBedrock(viewer)) continue;
+            if (canSee(viewer, owner)) return true;
+        }
+        return false;
     }
 
     /**
      * Bedrock can keep passenger nametags at a stale height until the target
-     * player's pose metadata changes. Flip the pose in the same tick: the
-     * client receives both updates together, so this resets the passenger
-     * position without the visible two-tick crouch caused by a delayed reset.
+     * player's pose metadata changes. A single tick is enough to force the
+     * client to recalculate the passenger position, while keeping the visual
+     * crouch as short as possible.
      */
     private void pulsePose(Player player) {
         if (player.isDead() || player.getHealth() <= 0.0
@@ -193,7 +203,9 @@ public final class PlayerHolograms implements Listener {
             return;
         }
         player.setSneaking(true);
-        player.setSneaking(false);
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (player.isOnline() && player.isSneaking()) player.setSneaking(false);
+        }, 1L);
     }
 
     @EventHandler
