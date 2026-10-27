@@ -195,13 +195,13 @@ public final class PlayerHolograms implements Listener {
 
     /**
      * Geyser refreshes stale TextDisplay passenger positions when the target's
-     * entity state changes. A no-icon, no-particle Luck effect is enough to
-     * trigger that refresh without changing the player's pose or movement.
+     * entity state changes. Luck is not a Bedrock effect, so Water Breathing is
+     * used as a harmless, hidden state update with no particles or HUD icon.
      */
     private void refreshBedrockNametag(Player player) {
         if (player.isDead() || player.getHealth() <= 0.0) return;
         player.addPotionEffect(new PotionEffect(
-                PotionEffectType.LUCK, 2, 0, true, false, false));
+                PotionEffectType.WATER_BREATHING, 20, 0, true, false, false));
     }
 
     @EventHandler
