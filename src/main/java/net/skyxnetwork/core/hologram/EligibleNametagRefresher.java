@@ -12,30 +12,34 @@ import java.util.UUID;
 /**
  * Soft-refresh bridge for EligiusNametag.
  *
- * The plugin owns the actual nametag TextDisplays. Clearing a viewer from its
- * renderer caches makes its normal update task send fresh spawn/mount packets
- * on the next pass, which repairs clients (especially Bedrock) that stop
- * rendering or keep an old passenger position. No nametag entity is recreated
- * here, so this stays cheap even with a large player count.
+ * The plugin owns the actual nametag TextDisplays. Recreating a target's two
+ * displays is the only reliable way to repair a Bedrock client that keeps the
+ * old passenger position; its normal update pass recreates them immediately.
+ * The work is staggered by PlayerHolograms, so only a few targets are touched
+ * per tick.
  */
 final class EligibleNametagRefresher {
 
     private final SkyXCore plugin;
     private Object renderer;
-    private Method clearViewer;
+    private Method destroyNametag;
     private boolean unavailable;
 
     EligibleNametagRefresher(SkyXCore plugin) {
         this.plugin = plugin;
     }
 
-    void refresh(Player viewer) {
-        if (unavailable || viewer == null || !viewer.isOnline()) return;
-        if (renderer == null || clearViewer == null) resolve();
-        if (renderer == null || clearViewer == null) return;
+    void refresh(Player target) {
+        if (unavailable || target == null || !target.isOnline()) return;
+        if (renderer == null || destroyNametag == null) resolve();
+        if (renderer == null || destroyNametag == null) return;
 
         try {
-            clearViewer.invoke(renderer, viewer.getUniqueId());
+            // Destroying the two TextDisplays makes EligiusNametag create fresh
+            // entities on its next 0.5s pass. A visibility-cache reset alone is
+            // not enough on Bedrock: the client keeps the stale passenger
+            // position until the entity is actually replaced.
+            destroyNametag.invoke(renderer, target.getUniqueId());
         } catch (Throwable exception) {
             unavailable = true;
             plugin.getLogger().fine("EligiusNametag refresh bridge disabled: " + exception.getMessage());
@@ -52,10 +56,10 @@ final class EligibleNametagRefresher {
             Object value = rendererField.get(eligible);
             if (value == null) return;
 
-            Method method = value.getClass().getMethod("clearViewer", UUID.class);
+            Method method = value.getClass().getMethod("destroyNametag", UUID.class);
             method.setAccessible(true);
             renderer = value;
-            clearViewer = method;
+            destroyNametag = method;
             plugin.getLogger().info("EligiusNametag refresh bridge active.");
         } catch (Throwable exception) {
             unavailable = true;
