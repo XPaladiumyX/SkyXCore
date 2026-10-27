@@ -36,10 +36,10 @@ final class EligibleNametagStyler {
                 for (Object line : lines) {
                     if (!(line instanceof TextDisplay display) || !display.isValid()) continue;
                     if (display.isShadowed()) display.setShadowed(false);
-                    if (display.isDefaultBackground()) {
-                        display.setDefaultBackground(false);
-                        display.setBackgroundColor(Color.fromARGB(0, 0, 0, 0));
-                    }
+                    // Force both flags every time: isDefaultBackground() is not a
+                    // reliable indicator of the effective rendered background.
+                    display.setDefaultBackground(false);
+                    display.setBackgroundColor(Color.fromARGB(0, 0, 0, 0));
                 }
             }
         } catch (Throwable exception) {
