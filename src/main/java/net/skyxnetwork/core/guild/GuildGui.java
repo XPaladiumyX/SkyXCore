@@ -170,7 +170,7 @@ public final class GuildGui implements Listener {
         inventory.setItem(29, item(Material.CLOCK, "&9Playtime",
                 List.of("&7Each hour: &e+" + settings.number(weights.playtime()) + " power"), false));
         inventory.setItem(30, item(Material.GOLD_INGOT, "&6Guild Bank",
-                List.of("&7Each 1,000$: &e+" + settings.number(weights.bank() * 1000) + " power",
+                List.of("&7Each $1,000: &e+" + settings.number(weights.bank() * 1000) + " power",
                         "&7Deposit in /guild bank."), false));
         inventory.setItem(31, item(Material.PLAYER_HEAD, "&eMembers",
                 List.of("&7Each member: &e+" + settings.number(weights.member()) + " power",
